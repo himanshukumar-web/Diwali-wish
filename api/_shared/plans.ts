@@ -31,3 +31,4 @@ export const SERVER_PLANS: Record<PlanId, ServerPlanConfig> = {
     amountInPaise: 9900
   }
 };
+

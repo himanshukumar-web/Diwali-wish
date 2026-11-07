@@ -7,7 +7,7 @@ function apiDevPlugin(): Plugin {
     name: 'api-dev-server',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        if (!req.url || !req.url.startsWith('/api/')) {
+        if (!req.url || !req.url.startsWith('/api/') || req.url.includes('/_shared/') || req.url.endsWith('.ts') || req.url.endsWith('.js')) {
           return next();
         }
 
