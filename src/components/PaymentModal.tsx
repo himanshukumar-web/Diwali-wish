@@ -73,7 +73,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+
+    if (Object.keys(newErrors).length > 0) {
+      setPaymentError(
+        lang === 'hi'
+          ? 'कृपया आगे बढ़ने से पहले सभी आवश्यक फ़ील्ड (प्रेषक का नाम, प्राप्तकर्ता का नाम, व्हाट्सएप नंबर) भरें।'
+          : 'Please complete all required fields (Sender Name, Recipient Name, WhatsApp Number) before proceeding.'
+      );
+      return false;
+    }
+
+    return true;
   };
 
   const loadRazorpayScript = (): Promise<boolean> => {
@@ -121,12 +131,20 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         })
       });
 
-      const orderData = await response.json();
+      let orderData: any;
+      try {
+        orderData = await response.json();
+      } catch {
+        const text = await response.text();
+        throw new Error(text || 'Failed to create order on server');
+      }
+
       if (!response.ok || !orderData.success) {
         throw new Error(orderData.error || 'Failed to create order on server');
       }
 
-      const { orderId, razorpayOrderId, amount, currency, keyId } = orderData;
+      const { razorpayOrderId, amount, currency, keyId } = orderData;
+      const orderId = orderData.internalOrderId || orderData.orderId;
 
       // 3. Open Razorpay Standard Checkout
       const options = {

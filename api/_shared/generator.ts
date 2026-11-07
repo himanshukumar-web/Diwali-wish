@@ -1,9 +1,9 @@
-import { OrderRecord, ThemeId } from '../../src/types';
-import { THEMES } from '../../src/data/plansData';
+import { OrderRecord } from './types';
 import { getDbClient } from './db';
-import { generateCardSvg } from '../../src/utils/cardGenerator';
+import { generateCardSvg, CardSvgOptions } from './cardGenerator';
 
 export { generateCardSvg };
+export type { CardSvgOptions };
 
 function slugify(text: string): string {
   return text
@@ -23,9 +23,9 @@ export function generateWebsiteSlug(order: OrderRecord): string {
 }
 
 export function generateWebsiteUrl(slug: string, orderId: string, origin?: string): string {
-  const base = origin || process.env.PUBLIC_URL || process.env.VERCEL_URL 
+  const base = origin || (process.env.VERCEL_URL 
     ? `https://${process.env.VERCEL_URL}` 
-    : 'https://diwaliwish-xi.vercel.app';
+    : 'https://diwaliwish-xi.vercel.app');
   return `${base.replace(/\/$/, '')}/?order=${orderId}&slug=${slug}`;
 }
 

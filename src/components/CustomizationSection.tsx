@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
   Check,
@@ -16,11 +16,16 @@ import {
   FileText,
   Star,
   MessageCircle,
-  ArrowRight
+  ArrowRight,
+  Eye,
+  Lock,
+  Globe,
+  Info
 } from 'lucide-react';
 import { Language, PlanId, ThemeId, CustomerFormData } from '../types';
 import { PLANS, THEMES, getPlanById } from '../data/plansData';
 import { CornerOrnament, OrnateDivider, DiyaGraphic } from './DecorativeBorders';
+import { generateCardSvg } from '../utils/cardGenerator';
 
 interface CustomizationSectionProps {
   id?: string;
@@ -42,7 +47,8 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
   onCustomInquiry,
 }) => {
   const [selectedPlanId, setSelectedPlanId] = useState<PlanId>('premium');
-  const [selectedThemePreview, setSelectedThemePreview] = useState<ThemeId>('maroon_gold');
+  const [previewLang, setPreviewLang] = useState<Language>(lang);
+  const [showLivePreview, setShowLivePreview] = useState<boolean>(true);
 
   const [formData, setFormData] = useState<CustomerFormData>({
     customerName: '',
@@ -72,11 +78,23 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
   const currentPlan = getPlanById(selectedPlanId);
   const planList = [PLANS.basic, PLANS.premium, PLANS.royal];
 
+  // Generate live watermarked preview SVG on the fly
+  const previewSvg = useMemo(() => {
+    return generateCardSvg({
+      recipientName: formData.recipientName,
+      senderName: formData.customerName,
+      greetingMessage: formData.greetingMessage,
+      theme: formData.preferredTheme,
+      lang: previewLang,
+      isWatermarked: true // Strictly watermarked for free preview
+    });
+  }, [formData.recipientName, formData.customerName, formData.greetingMessage, formData.preferredTheme, previewLang]);
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
     if (!formData.customerName.trim()) {
-      newErrors.customerName = lang === 'hi' ? 'कृपया अपना नाम दर्ज करें' : 'Please enter your name (sender)';
+      newErrors.customerName = lang === 'hi' ? 'कृपया अपना नाम (प्रेषक) दर्ज करें' : 'Please enter your name (sender)';
     }
 
     if (!formData.recipientName.trim()) {
@@ -93,7 +111,21 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+
+    if (Object.keys(newErrors).length > 0) {
+      setPaymentError(
+        lang === 'hi'
+          ? 'कृपया आगे बढ़ने से पहले सभी आवश्यक फ़ील्ड (प्रेषक का नाम, प्राप्तकर्ता का नाम, 10 अंकों का व्हाट्सएप नंबर) भरें।'
+          : 'Please complete all required fields (Sender Name, Recipient Name, and 10-digit WhatsApp Number) to proceed with payment.'
+      );
+      // Auto-focus first error field
+      const firstErrorField = Object.keys(newErrors)[0];
+      const el = document.getElementById(`field-${firstErrorField}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+
+    return true;
   };
 
   const loadRazorpayScript = (): Promise<boolean> => {
@@ -119,10 +151,14 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
     setIsSubmitting(true);
 
     try {
-      // 1. Load Razorpay script
+      // 1. Ensure Razorpay script is loaded
       const loaded = await loadRazorpayScript();
-      if (!loaded) {
-        throw new Error(lang === 'hi' ? 'रेज़रपे लोड करने में विफल। कृपया पुनः प्रयास करें।' : 'Failed to load Razorpay SDK. Please check your internet connection.');
+      if (!loaded || !window.Razorpay) {
+        throw new Error(
+          lang === 'hi'
+            ? 'रेज़रपे चेकआउट लोड करने में विफल रहा। कृपया इंटरनेट कनेक्शन या विज्ञापन अवरोधक (Adblocker) जांचें।'
+            : 'Failed to load Razorpay Checkout SDK. Please disable ad-blockers and check your network connection.'
+        );
       }
 
       // 2. Call server order creation endpoint
@@ -137,24 +173,37 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
           recipientName: formData.recipientName.trim(),
           greetingMessage: formData.greetingMessage?.trim(),
           theme: formData.preferredTheme,
+          preferredTheme: formData.preferredTheme,
           customInstructions: formData.customInstructions?.trim()
         })
       });
 
-      const orderData = await orderRes.json();
-      if (!orderRes.ok || !orderData.success) {
-        throw new Error(orderData.error || (lang === 'hi' ? 'ऑर्डर बनाने में असमर्थ' : 'Failed to create Razorpay order'));
+      let orderData: any;
+      try {
+        orderData = await orderRes.json();
+      } catch {
+        const text = await orderRes.text();
+        throw new Error(text || 'Server error occurred during payment order creation.');
       }
 
-      const { razorpayOrderId, amount, currency, keyId, internalOrderId } = orderData;
+      if (!orderRes.ok || !orderData.success) {
+        throw new Error(orderData.error || (lang === 'hi' ? 'ऑर्डर बनाने में असमर्थ' : 'Failed to create Razorpay order on server.'));
+      }
 
-      // 3. Launch Razorpay Checkout Modal
+      const { razorpayOrderId, amount, currency, keyId } = orderData;
+      const internalOrderId = orderData.internalOrderId || orderData.orderId;
+
+      if (!keyId) {
+        throw new Error('Razorpay Key ID is not configured on the server. Please contact support.');
+      }
+
+      // 3. Launch Razorpay Standard Checkout Modal
       const options = {
         key: keyId,
         amount: amount,
         currency: currency || 'INR',
-        name: 'Royal Diwali Wishes',
-        description: `${currentPlan.nameEn} Plan - Test Mode Payment`,
+        name: 'Royal Diwali Wishes Platform',
+        description: `${currentPlan.nameEn} (₹${currentPlan.priceInInr}) - Test Mode Checkout`,
         order_id: razorpayOrderId,
         image: 'https://images.unsplash.com/photo-1543807535-eceef0bc6599?auto=format&fit=crop&w=160&q=80',
         prefill: {
@@ -163,7 +212,7 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
           contact: formData.customerWhatsapp.replace(/\D/g, '')
         },
         theme: {
-          color: '#3B0D16'
+          color: '#3B0D16' // Royal Maroon
         },
         modal: {
           ondismiss: () => {
@@ -181,16 +230,27 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
+                orderId: internalOrderId,
+                internalOrderId: internalOrderId,
                 razorpayOrderId: response.razorpay_order_id,
                 razorpayPaymentId: response.razorpay_payment_id,
                 razorpaySignature: response.razorpay_signature,
-                internalOrderId: internalOrderId
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
               })
             });
 
-            const verifyData = await verifyRes.json();
+            let verifyData: any;
+            try {
+              verifyData = await verifyRes.json();
+            } catch {
+              const text = await verifyRes.text();
+              throw new Error(text || 'Verification response error.');
+            }
+
             if (!verifyRes.ok || !verifyData.success) {
-              throw new Error(verifyData.error || (lang === 'hi' ? 'भुगतान सत्यापन विफल रहा' : 'Payment signature verification failed'));
+              throw new Error(verifyData.error || (lang === 'hi' ? 'भुगतान सत्यापन विफल रहा' : 'Payment signature verification failed.'));
             }
 
             // Payment verified & recorded
@@ -205,14 +265,24 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
 
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', (failResp: any) => {
-        setPaymentError(failResp.error?.description || (lang === 'hi' ? 'भुगतान अस्वीकार हो गया' : 'Payment could not be processed'));
+        setPaymentError(
+          failResp.error?.description || (lang === 'hi' ? 'भुगतान अस्वीकार हो गया' : 'Payment was not completed. Please try again.')
+        );
         setIsSubmitting(false);
       });
       rzp.open();
     } catch (err: any) {
-      setPaymentError(err.message || 'An unexpected error occurred');
+      setPaymentError(err.message || 'An unexpected error occurred during checkout.');
       setIsSubmitting(false);
     }
+  };
+
+  const scrollToPreview = () => {
+    setShowLivePreview(true);
+    setTimeout(() => {
+      const el = document.getElementById('free-preview-panel');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
   };
 
   return (
@@ -347,10 +417,10 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
         })}
       </div>
 
-      {/* 2. Embedded Complete Customer Customization Form */}
+      {/* 2. Embedded Customer Customization Form + Free Watermarked Live Preview */}
       <div
         id="customization-form"
-        className="royal-card-glow rounded-3xl p-6 sm:p-10 border-2 border-gold-400/50 shadow-2xl max-w-4xl mx-auto mb-16 relative z-10 bg-gradient-to-b from-maroon-950/95 via-maroon-900/90 to-maroon-950/95"
+        className="royal-card-glow rounded-3xl p-6 sm:p-10 border-2 border-gold-400/50 shadow-2xl max-w-5xl mx-auto mb-16 relative z-10 bg-gradient-to-b from-maroon-950/95 via-maroon-900/90 to-maroon-950/95"
       >
         <CornerOrnament position="top-left" className="absolute top-3 left-3 w-7 h-7 opacity-75" />
         <CornerOrnament position="top-right" className="absolute top-3 right-3 w-7 h-7 opacity-75" />
@@ -364,28 +434,46 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
           <h3 className={lang === 'hi' ? 'font-devanagari font-bold text-2xl sm:text-3xl gold-text-gradient mb-2' : 'font-heading font-bold text-2xl sm:text-3xl gold-text-gradient mb-2'}>
             {lang === 'hi' ? 'अपनी व्यक्तिगत शुभकामना विवरण भरें' : 'Fill Your Personal Greeting Details'}
           </h3>
-          <p className="text-xs sm:text-sm text-gold-200/80">
+          <p className="text-xs sm:text-sm text-gold-200/80 max-w-xl mx-auto">
             {lang === 'hi'
-              ? `चयनित योजना: ${currentPlan.nameHi} (₹${currentPlan.priceInInr}) • सुरक्षित रेज़रपे टेस्ट मोड भुगतान`
-              : `Selected: ${currentPlan.nameEn} Plan (₹${currentPlan.priceInInr}) • Instant Razorpay Test Checkout`}
+              ? `चयनित योजना: ${currentPlan.nameHi} (₹${currentPlan.priceInInr}) • आप निःशुल्क पूर्वावलोकन देख सकते हैं या तुरंत सक्रिय कर सकते हैं`
+              : `Selected: ${currentPlan.nameEn} Plan (₹${currentPlan.priceInInr}) • Preview your greeting for free or complete secure payment`}
           </p>
         </div>
 
-        {/* Error Notification */}
+        {/* Clear Explanation Callout (Verbatim Part 5 Requirement) */}
+        <div className="mb-8 p-4 rounded-2xl bg-gold-500/10 border border-gold-400/40 text-gold-200 text-xs sm:text-sm flex items-start space-x-3 shadow-inner">
+          <Info className="w-5 h-5 text-amber-300 flex-shrink-0 mt-0.5" />
+          <div className="leading-relaxed">
+            <p className="font-semibold text-amber-300 mb-0.5">
+              {lang === 'hi' ? '✨ निःशुल्क पूर्वावलोकन व संपूर्ण ग्रीटिंग अनलॉक:' : '✨ Free Watermarked Preview vs. Full Experience:'}
+            </p>
+            <p className="text-gold-100/90">
+              "Try your personalized greeting for free with a Himanshu Kumar watermark. Purchase a plan to unlock your full greeting website and downloadable card."
+            </p>
+          </div>
+        </div>
+
+        {/* Error Notification Banner */}
         {paymentError && (
-          <div className="mb-6 p-4 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs sm:text-sm flex items-start space-x-2">
+          <div className="mb-6 p-4 rounded-2xl bg-rose-950/90 border border-rose-500/60 text-rose-200 text-xs sm:text-sm flex items-start space-x-3 animate-fade-in shadow-lg">
             <AlertCircle className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" />
-            <span>{paymentError}</span>
+            <div className="flex-1">
+              <span className="font-semibold block mb-0.5">
+                {lang === 'hi' ? 'भुगतान / सत्यापन त्रुटि:' : 'Payment / Validation Notice:'}
+              </span>
+              <span>{paymentError}</span>
+            </div>
           </div>
         )}
 
-        <form onSubmit={handlePayNow} className="space-y-5">
+        <form onSubmit={handlePayNow} className="space-y-6">
           {/* Plan Selector Buttons */}
           <div>
             <label className="block text-xs font-semibold text-gold-300 uppercase tracking-wider mb-2">
               <span className="flex items-center space-x-1.5">
                 <Crown className="w-4 h-4 text-gold-400" />
-                <span>{lang === 'hi' ? 'योजना बदलें (Select Plan):' : 'Active Plan:'}</span>
+                <span>{lang === 'hi' ? 'योजना बदलें (Active Plan):' : 'Active Plan:'}</span>
               </span>
             </label>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -412,7 +500,7 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
 
           {/* Row 1: Sender Name & Recipient Name */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div id="field-customerName">
               <label className="block text-xs font-semibold text-gold-300 mb-1.5">
                 <span className="flex items-center space-x-1.5">
                   <User className="w-4 h-4 text-gold-400" />
@@ -422,14 +510,19 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
               <input
                 type="text"
                 value={formData.customerName}
-                onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, customerName: e.target.value });
+                  if (errors.customerName) setErrors({ ...errors, customerName: '' });
+                }}
                 placeholder={lang === 'hi' ? 'उदा. हिमांशु कुमार' : 'e.g. Himanshu Kumar'}
-                className="name-input-field w-full px-4 py-3 rounded-xl border border-gold-400 text-sm font-semibold outline-none shadow-inner"
+                className={`name-input-field w-full px-4 py-3 rounded-xl border text-sm font-semibold outline-none shadow-inner ${
+                  errors.customerName ? 'border-rose-400 ring-2 ring-rose-400/30' : 'border-gold-400'
+                }`}
               />
               {errors.customerName && <p className="text-xs text-rose-400 mt-1">{errors.customerName}</p>}
             </div>
 
-            <div>
+            <div id="field-recipientName">
               <label className="block text-xs font-semibold text-gold-300 mb-1.5">
                 <span className="flex items-center space-x-1.5">
                   <Heart className="w-4 h-4 text-rose-400" />
@@ -439,9 +532,14 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
               <input
                 type="text"
                 value={formData.recipientName}
-                onChange={(e) => setFormData({ ...formData, recipientName: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, recipientName: e.target.value });
+                  if (errors.recipientName) setErrors({ ...errors, recipientName: '' });
+                }}
                 placeholder={lang === 'hi' ? 'उदा. हिमांशु कुमार व परिवार' : 'e.g. Himanshu Kumar & Family'}
-                className="name-input-field w-full px-4 py-3 rounded-xl border border-gold-400 text-sm font-semibold outline-none shadow-inner"
+                className={`name-input-field w-full px-4 py-3 rounded-xl border text-sm font-semibold outline-none shadow-inner ${
+                  errors.recipientName ? 'border-rose-400 ring-2 ring-rose-400/30' : 'border-gold-400'
+                }`}
               />
               {errors.recipientName && <p className="text-xs text-rose-400 mt-1">{errors.recipientName}</p>}
             </div>
@@ -449,7 +547,7 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
 
           {/* Row 2: WhatsApp Number & Optional Email */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+            <div id="field-customerWhatsapp">
               <label className="block text-xs font-semibold text-gold-300 mb-1.5">
                 <span className="flex items-center space-x-1.5">
                   <Phone className="w-4 h-4 text-emerald-400" />
@@ -459,10 +557,15 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
               <input
                 type="tel"
                 value={formData.customerWhatsapp}
-                onChange={(e) => setFormData({ ...formData, customerWhatsapp: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, customerWhatsapp: e.target.value });
+                  if (errors.customerWhatsapp) setErrors({ ...errors, customerWhatsapp: '' });
+                }}
                 placeholder="e.g. 9417885574"
                 maxLength={13}
-                className="name-input-field w-full px-4 py-3 rounded-xl border border-gold-400 text-sm font-semibold outline-none shadow-inner"
+                className={`name-input-field w-full px-4 py-3 rounded-xl border text-sm font-semibold outline-none shadow-inner ${
+                  errors.customerWhatsapp ? 'border-rose-400 ring-2 ring-rose-400/30' : 'border-gold-400'
+                }`}
               />
               {errors.customerWhatsapp && <p className="text-xs text-rose-400 mt-1">{errors.customerWhatsapp}</p>}
             </div>
@@ -485,12 +588,12 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
             </div>
           </div>
 
-          {/* Theme Selection */}
+          {/* Theme Selection: All 4 Themes (Maroon, Purple, Saffron, Emerald) */}
           <div>
             <label className="block text-xs font-semibold text-gold-300 mb-2">
               <span className="flex items-center space-x-1.5">
                 <Palette className="w-4 h-4 text-gold-400" />
-                <span>{lang === 'hi' ? 'पसंदीदा थीम (Preferred Theme):' : 'Preferred Theme:'}</span>
+                <span>{lang === 'hi' ? 'पसंदीदा थीम (4 राजसी भारतीय थीम्स):' : 'Preferred Theme (4 Royal Indian Themes):'}</span>
               </span>
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -519,14 +622,32 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
             </div>
           </div>
 
-          {/* Greeting Message */}
+          {/* Greeting Message & Language Toggle */}
           <div>
-            <label className="block text-xs font-semibold text-gold-300 mb-1.5">
-              <span className="flex items-center space-x-1.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-gold-300 flex items-center space-x-1.5">
                 <MessageSquare className="w-4 h-4 text-gold-400" />
-                <span>{lang === 'hi' ? 'व्यक्तिगत संदेश / शुभकामना (Greeting Message):' : 'Personal Greeting Message:'}</span>
-              </span>
-            </label>
+                <span>{lang === 'hi' ? 'व्यक्तिगत संदेश / शुभकामना:' : 'Personal Greeting Message:'}</span>
+              </label>
+
+              {/* Preview Language Toggle */}
+              <div className="flex items-center space-x-1 bg-maroon-950 rounded-lg p-0.5 border border-gold-500/30 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setPreviewLang('hi')}
+                  className={`px-2 py-0.5 rounded ${previewLang === 'hi' ? 'bg-gold-500 text-maroon-950 font-bold' : 'text-gold-300/70 hover:text-gold-200'}`}
+                >
+                  हिन्दी
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewLang('en')}
+                  className={`px-2 py-0.5 rounded ${previewLang === 'en' ? 'bg-gold-500 text-maroon-950 font-bold' : 'text-gold-300/70 hover:text-gold-200'}`}
+                >
+                  EN
+                </button>
+              </div>
+            </div>
             <textarea
               rows={3}
               value={formData.greetingMessage}
@@ -557,57 +678,150 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
             />
           </div>
 
-          {/* Pricing & Submit CTA */}
-          <div className="pt-5 border-t border-gold-500/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-center sm:text-left">
-              <span className="text-xs text-gold-400/80 uppercase tracking-widest block font-medium">
-                {lang === 'hi' ? 'कुल देय राशि:' : 'Total Amount:'}
-              </span>
-              <div className="flex items-baseline space-x-1">
-                <span className="text-2xl font-bold text-gold-300">₹</span>
-                <span className="text-4xl font-extrabold gold-text-gradient font-heading">{currentPlan.priceInInr}</span>
-                <span className="text-xs text-amber-300/80 ml-2">({currentPlan.nameEn} Plan • Test Mode)</span>
+          {/* TWO CLEAR ACTIONS: 1. Preview Free Greeting | 2. Pay & Get Full Personalized Greeting */}
+          <div className="pt-6 border-t border-gold-500/30">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
+              {/* Action 1: Preview Free Greeting */}
+              <button
+                type="button"
+                onClick={scrollToPreview}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-full font-bold text-sm sm:text-base text-gold-300 hover:text-gold-100 bg-maroon-900/90 hover:bg-gold-500/20 border-2 border-gold-400/60 shadow-lg transition flex items-center justify-center space-x-2"
+              >
+                <Eye className="w-4 h-4 text-gold-400" />
+                <span className={lang === 'hi' ? 'font-devanagari font-bold' : 'font-heading font-bold'}>
+                  {lang === 'hi' ? '👁️ निःशुल्क ग्रीटिंग पूर्वावलोकन देखें (FREE)' : 'Preview Your Greeting — FREE'}
+                </span>
+              </button>
+
+              {/* Action 2: Pay & Get Full Personalized Greeting */}
+              <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
+                <div className="text-center sm:text-right">
+                  <span className="text-[11px] text-gold-400/80 uppercase tracking-widest block font-medium">
+                    {lang === 'hi' ? 'कुल देय राशि:' : 'Plan Price:'}
+                  </span>
+                  <div className="flex items-baseline justify-center sm:justify-end space-x-1">
+                    <span className="text-xl font-bold text-gold-300">₹</span>
+                    <span className="text-3xl font-extrabold gold-text-gradient font-heading">{currentPlan.priceInInr}</span>
+                    <span className="text-[11px] text-amber-300/80 ml-1">({currentPlan.nameEn})</span>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full sm:w-auto px-8 py-3.5 rounded-full font-bold text-base text-maroon-950 bg-gradient-to-r from-gold-300 via-gold-400 to-amber-500 hover:from-gold-200 hover:to-amber-400 shadow-gold-glow transition transform hover:-translate-y-0.5 disabled:opacity-60 flex items-center justify-center space-x-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin text-maroon-950" />
+                      <span>{lang === 'hi' ? 'रेज़रपे सुरक्षित भुगतान प्रारंभ हो रहा है...' : 'Creating secure payment...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5 text-maroon-950" />
+                      <span className={lang === 'hi' ? 'font-devanagari font-bold' : 'font-heading font-bold'}>
+                        {lang === 'hi'
+                          ? `₹${currentPlan.priceInInr} भुगतान करें व संपूर्ण शुभकामना प्राप्त करें`
+                          : `Pay & Get Full Personalized Greeting (₹${currentPlan.priceInInr})`}
+                      </span>
+                      <ArrowRight className="w-5 h-5 text-maroon-950" />
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full sm:w-auto px-8 py-4 rounded-full font-bold text-base text-maroon-950 bg-gradient-to-r from-gold-300 via-gold-400 to-amber-500 hover:from-gold-200 hover:to-amber-400 shadow-gold-glow transition transform hover:-translate-y-0.5 disabled:opacity-60 flex items-center justify-center space-x-2"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin text-maroon-950" />
-                  <span>{lang === 'hi' ? 'रेज़रपे लोड हो रहा है...' : 'Processing Payment...'}</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-5 h-5 text-maroon-950" />
-                  <span className={lang === 'hi' ? 'font-devanagari font-bold' : 'font-heading font-bold'}>
-                    {lang === 'hi'
-                      ? `रेज़रपे द्वारा ₹${currentPlan.priceInInr} सुरक्षित भुगतान करें`
-                      : `Pay ₹${currentPlan.priceInInr} via Razorpay`}
-                  </span>
-                  <ArrowRight className="w-5 h-5 text-maroon-950" />
-                </>
-              )}
-            </button>
-          </div>
-
-          <div className="text-center pt-2">
-            <span className="inline-flex items-center space-x-1.5 text-xs text-gold-400/70">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>
-                {lang === 'hi'
-                  ? 'सुरक्षित रेज़रपे टेस्ट मोड गेटवे • किसी वास्तविक कार्ड चार्ज की आवश्यकता नहीं'
-                  : 'Razorpay Test Mode Sandbox • Instant link and greeting generation'}
+            <div className="text-center pt-2">
+              <span className="inline-flex items-center space-x-1.5 text-xs text-gold-400/70">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>
+                  {lang === 'hi'
+                    ? 'सुरक्षित रेज़रपे टेस्ट मोड • सर्वर-सत्यापित भुगतान • तुरंत वेबसाइट लिंक व एचडी कार्ड'
+                    : 'Razorpay Test Mode Sandbox • Instant link and greeting generation'}
+                </span>
               </span>
-            </span>
+            </div>
           </div>
         </form>
+
+        {/* 3. LIVE WATERMARKED GREETING CARD PREVIEW (Part 2 & Part 3) */}
+        {showLivePreview && (
+          <div
+            id="free-preview-panel"
+            className="mt-12 pt-8 border-t-2 border-gold-500/40"
+          >
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
+              <div className="text-center sm:text-left">
+                <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-gold-500/20 text-gold-300 text-xs font-bold border border-gold-400/40 mb-1">
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  <span>{lang === 'hi' ? 'वाटरमार्क सहित निःशुल्क पूर्वावलोकन' : 'Free Watermarked Preview'}</span>
+                </div>
+                <h4 className="font-heading font-bold text-lg sm:text-xl text-gold-200">
+                  {lang === 'hi' ? 'आपका लाइव ग्रीटिंग कार्ड पूर्वावलोकन' : 'Your Live Greeting Card Preview'}
+                </h4>
+              </div>
+
+              {/* Watermark Notice */}
+              <div className="text-center sm:text-right text-[11px] text-gold-300/80 max-w-sm">
+                <span>
+                  {lang === 'hi'
+                    ? 'वाटरमार्क: "Designed & Developed by Himanshu Kumar"'
+                    : 'Permanent Watermark: "Designed & Developed by Himanshu Kumar"'}
+                </span>
+                <span className="block text-amber-400 text-[10px]">
+                  {lang === 'hi' ? 'क्लीन एचडी कार्ड व बिना वाटरमार्क डाउनलोड किसी भी प्लान के साथ अनलॉक होता है।' : 'Clean HD download without watermark is unlocked upon purchasing any plan.'}
+                </span>
+              </div>
+            </div>
+
+            {/* SVG Render Container with Right-Click Protection */}
+            <div
+              onContextMenu={(e) => e.preventDefault()}
+              className="relative w-full rounded-2xl overflow-hidden border-2 border-gold-400/50 shadow-2xl bg-black select-none"
+              style={{
+                userSelect: 'none',
+                WebkitUserSelect: 'none'
+              }}
+            >
+              <div
+                className="w-full h-auto"
+                dangerouslySetInnerHTML={{ __html: previewSvg }}
+              />
+
+              {/* Watermark Protection overlay shield to discourage simple browser right-click save */}
+              <div
+                className="absolute inset-0 pointer-events-none border border-gold-400/30 rounded-2xl"
+                style={{
+                  background: 'radial-gradient(circle at 50% 50%, transparent 60%, rgba(24, 11, 11, 0.4) 100%)'
+                }}
+              ></div>
+            </div>
+
+            <div className="mt-4 p-3 rounded-xl bg-maroon-950/70 border border-gold-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gold-300">
+              <span className="text-center sm:text-left">
+                {lang === 'hi'
+                  ? '✨ यह आपका लाइव पूर्वावलोकन है। नाम, भाषा या संदेश बदलने पर यह तुरंत अपडेट होता है।'
+                  : '✨ This is your live preview. It automatically updates when you change names, language, theme, or message above.'}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const formElement = document.getElementById('customization-form');
+                  if (formElement) {
+                    formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }}
+                className="inline-flex items-center space-x-1 font-bold text-amber-300 hover:text-amber-100 transition whitespace-nowrap"
+              >
+                <span>{lang === 'hi' ? `₹${currentPlan.priceInInr} में अनलॉक करें →` : `Unlock Clean Card for ₹${currentPlan.priceInInr} →`}</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 3. Theme Selector Showcase */}
+      {/* 4. Theme Selector Showcase */}
       <div className="royal-card-glow rounded-3xl p-6 sm:p-10 border border-gold-500/40 shadow-2xl mb-14 text-center max-w-4xl mx-auto relative z-10">
         <div className="flex items-center justify-center space-x-2 text-saffron-400 text-xs sm:text-sm font-semibold uppercase tracking-wider mb-2">
           <Star className="w-3.5 h-3.5 fill-current" />
@@ -622,12 +836,11 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {(Object.keys(THEMES) as ThemeId[]).map((tId) => {
             const theme = THEMES[tId];
-            const isSelected = selectedThemePreview === tId;
+            const isSelected = formData.preferredTheme === tId;
             return (
               <button
                 key={tId}
                 onClick={() => {
-                  setSelectedThemePreview(tId);
                   setFormData((prev) => ({ ...prev, preferredTheme: tId }));
                 }}
                 className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between ${
@@ -656,7 +869,7 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
         </div>
       </div>
 
-      {/* 4. Custom Inquiries (₹10–₹100) */}
+      {/* 5. Custom Inquiries (₹10–₹100) */}
       <div className="royal-card-glow rounded-3xl p-6 sm:p-10 border-2 border-dashed border-gold-400/50 shadow-2xl max-w-3xl mx-auto text-center relative z-10">
         <div className="w-12 h-12 rounded-full bg-saffron-500/20 border border-saffron-400/50 flex items-center justify-center mx-auto mb-3">
           <MessageCircle className="w-6 h-6 text-saffron-400" />

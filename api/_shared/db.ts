@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from './env';
-import { OrderRecord, CustomInquiryRequest } from '../../src/types';
+import { OrderRecord, CustomInquiryRequest } from './types';
 import fs from 'fs';
 import path from 'path';
 
@@ -11,8 +11,9 @@ const memoryOrders = new Map<string, OrderRecord>();
 const memoryWebhookEvents = new Set<string>();
 const memoryInquiries: any[] = [];
 
-// Persistence file for local fallback testing
-const FALLBACK_DIR = path.resolve(process.cwd(), '.data');
+// Persistence file for local fallback testing (uses /tmp on Vercel lambda)
+const isLambda = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const FALLBACK_DIR = isLambda ? path.join('/tmp', '.data') : path.resolve(process.cwd(), '.data');
 const FALLBACK_FILE = path.join(FALLBACK_DIR, 'local_orders.json');
 
 function loadFallbackStore() {
@@ -212,7 +213,7 @@ export async function getAllOrders(): Promise<OrderRecord[]> {
   }
 
   return Array.from(memoryOrders.values()).sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
   );
 }
 

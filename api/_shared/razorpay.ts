@@ -1,6 +1,8 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
-import { getRazorpayKeys } from './env';
+import { getRazorpayKeys, getWebhookSecret } from './env';
+
+export { getRazorpayKeys, getWebhookSecret };
 
 let razorpayInstance: Razorpay | null = null;
 

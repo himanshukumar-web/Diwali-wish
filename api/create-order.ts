@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { PLANS } from '../src/data/plansData';
-import { PlanId, ThemeId, OrderRecord } from '../src/types';
-import { getRazorpayKeys, createRazorpayOrder } from './_shared/razorpay';
+import { SERVER_PLANS } from './_shared/plans';
+import { PlanId, ThemeId, OrderRecord } from './_shared/types';
+import { getRazorpayKeys } from './_shared/env';
+import { createRazorpayOrder } from './_shared/razorpay';
 import { saveOrder } from './_shared/db';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -27,14 +28,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recipientName,
       greetingMessage,
       preferredTheme,
+      theme,
       customInstructions
     } = req.body || {};
 
+    const activeTheme = preferredTheme || theme || 'maroon_gold';
+
     // 1. Validate required fields
-    if (!planId || !PLANS[planId as PlanId]) {
+    if (!planId || !SERVER_PLANS[planId as PlanId]) {
       return res.status(400).json({
         success: false,
-        error: `Invalid plan selected. Must be one of: basic, premium, royal`
+        error: 'Invalid plan selected. Must be one of: basic, premium, royal'
       });
     }
 
@@ -59,14 +63,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 2. Server-side calculated pricing — NEVER trust browser amount
-    const selectedPlan = PLANS[planId as PlanId];
+    const selectedPlan = SERVER_PLANS[planId as PlanId];
     const amountInPaise = selectedPlan.amountInPaise;
     const { keyId } = getRazorpayKeys();
 
     if (!keyId) {
       return res.status(500).json({
         success: false,
-        error: 'Server configuration error: Razorpay Key ID not configured.'
+        error: 'Server configuration error: Razorpay Key ID not configured. Please ensure RAZORPAY_KEY_ID is set in environment variables.'
       });
     }
 
@@ -84,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         customerName: customerName.trim(),
         recipientName: recipientName.trim(),
         customerWhatsapp: cleanPhone,
-        theme: preferredTheme || 'maroon_gold'
+        theme: activeTheme
       }
     });
 
@@ -96,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       customer_email: customerEmail?.trim() || '',
       recipient_name: recipientName.trim(),
       greeting_message: greetingMessage?.trim() || 'Wishing you and your wonderful family a very Happy and Prosperous Diwali!',
-      theme: (preferredTheme as ThemeId) || 'maroon_gold',
+      theme: (activeTheme as ThemeId) || 'maroon_gold',
       custom_instructions: customInstructions?.trim() || '',
       plan_id: planId as PlanId,
       amount: amountInPaise,
@@ -110,10 +114,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await saveOrder(newOrder);
 
-    // 6. Return Razorpay order details to frontend
+    // 6. Return Razorpay order details to frontend (providing both orderId and internalOrderId for full compatibility)
     return res.status(200).json({
       success: true,
       orderId,
+      internalOrderId: orderId,
       razorpayOrderId: rzpOrder.id,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
@@ -123,8 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('Error in /api/create-order:', err);
     return res.status(500).json({
       success: false,
-      error: err.message || 'Failed to create order'
+      error: err.message || 'Failed to create order on server'
     });
   }
 }
-

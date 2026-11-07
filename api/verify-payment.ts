@@ -17,9 +17,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+    const rzpOrderId = req.body?.razorpay_order_id || req.body?.razorpayOrderId;
+    const rzpPaymentId = req.body?.razorpay_payment_id || req.body?.razorpayPaymentId;
+    const rzpSignature = req.body?.razorpay_signature || req.body?.razorpaySignature;
+    const targetOrderId = req.body?.orderId || req.body?.internalOrderId;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (!rzpOrderId || !rzpPaymentId || !rzpSignature) {
       return res.status(400).json({
         success: false,
         error: 'Missing required Razorpay payment verification parameters'
@@ -27,9 +30,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 1. Locate the order by internal ID or Razorpay Order ID
-    let order = orderId ? await getOrderById(orderId) : null;
+    let order = targetOrderId ? await getOrderById(targetOrderId) : null;
     if (!order) {
-      order = await getOrderByRazorpayOrderId(razorpay_order_id);
+      order = await getOrderByRazorpayOrderId(rzpOrderId);
     }
 
     if (!order) {
@@ -40,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 2. Validate that the Razorpay Order ID matches what was created on the server
-    if (order.razorpay_order_id && order.razorpay_order_id !== razorpay_order_id) {
+    if (order.razorpay_order_id && order.razorpay_order_id !== rzpOrderId) {
       return res.status(400).json({
         success: false,
         error: 'Mismatched order ID: Razorpay order ID does not match server order'
@@ -61,9 +64,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. MANDATORY SERVER-SIDE HMAC SHA256 SIGNATURE VERIFICATION
     const isValid = verifyPaymentSignature({
-      razorpayOrderId: razorpay_order_id,
-      razorpayPaymentId: razorpay_payment_id,
-      razorpaySignature: razorpay_signature
+      razorpayOrderId: rzpOrderId,
+      razorpayPaymentId: rzpPaymentId,
+      razorpaySignature: rzpSignature
     });
 
     if (!isValid) {
@@ -82,8 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 5. Signature is valid! Fulfill the order
     order.payment_status = 'paid';
     order.payment_verified = true;
-    order.razorpay_payment_id = razorpay_payment_id;
-    order.razorpay_signature = razorpay_signature;
+    order.razorpay_payment_id = rzpPaymentId;
+    order.razorpay_signature = rzpSignature;
 
     // 6. Generate unique personalized website slug & URL
     const slug = order.website_slug || generateWebsiteSlug(order);
