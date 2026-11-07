@@ -1,0 +1,261 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    background-color: #180B0B;
+    background-image: 
+      radial-gradient(circle at 50% 0%, #641C26 0%, #3B0D16 45%, #180B0B 90%);
+    background-attachment: fixed;
+    color: #FFF3DC;
+    overflow-x: hidden;
+  }
+
+  /* Custom Royal Scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #180B0B;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #D4AF37 0%, #641C26 100%);
+    border-radius: 5px;
+    border: 1px solid rgba(212, 175, 55, 0.4);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #F5D77F 0%, #D4AF37 100%);
+  }
+}
+
+/* ==========================================================
+   NAME INPUT FIELD – HIGH CONTRAST DARK MAROON ON WHITE
+   ========================================================== */
+.name-input-field,
+input.name-input-field {
+  background-color: #FFFFFF !important;
+  color: #3B0D16 !important;
+  -webkit-text-fill-color: #3B0D16 !important;
+  caret-color: #D4AF37 !important;
+  font-weight: 600 !important;
+  font-size: 18px !important;
+  font-family: 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Inter', sans-serif !important;
+}
+
+.name-input-field::placeholder,
+input.name-input-field::placeholder {
+  color: #888888 !important;
+  -webkit-text-fill-color: #888888 !important;
+  opacity: 1 !important;
+  font-weight: 500 !important;
+}
+
+/* Autofill styling override for Chrome/Safari/Edge/Firefox */
+.name-input-field:-webkit-autofill,
+.name-input-field:-webkit-autofill:hover,
+.name-input-field:-webkit-autofill:focus,
+.name-input-field:-webkit-autofill:active {
+  -webkit-text-fill-color: #3B0D16 !important;
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+  box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+  caret-color: #D4AF37 !important;
+  font-weight: 600 !important;
+  font-size: 18px !important;
+}
+
+/* Text selection inside name input */
+.name-input-field::selection {
+  background-color: #F5D77F !important;
+  color: #3B0D16 !important;
+  -webkit-text-fill-color: #3B0D16 !important;
+}
+
+/* ==========================================================
+   AUTHENTIC DEVANAGARI TYPOGRAPHY (Noto Serif Devanagari)
+   ========================================================== */
+.font-devanagari,
+.font-hindi,
+[lang="hi"] {
+  font-family: 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif', serif;
+  letter-spacing: 0 !important;
+  word-spacing: normal;
+  font-kerning: normal;
+  font-feature-settings: normal;
+  font-variant-ligatures: normal;
+  font-style: normal;
+}
+
+/* Main Heading: "॥ शुभ दीपावली ॥" */
+.diwali-main-heading {
+  font-family: 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif', serif !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  word-spacing: normal;
+  line-height: 1.5 !important;
+  font-kerning: normal;
+  font-feature-settings: normal;
+  font-variant-ligatures: normal;
+  font-style: normal !important;
+  display: inline-block;
+  padding-top: 0.15em;
+  padding-bottom: 0.25em;
+  padding-left: 0.05em;
+  padding-right: 0.05em;
+  overflow: visible;
+}
+
+/* Gold Gradient for Devanagari Heading without clipping */
+.diwali-main-heading.gold-text-gradient {
+  background: linear-gradient(135deg, #FFF9E6 0%, #F5D77F 25%, #D4AF37 50%, #FF9933 80%, #B89225 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 25px rgba(212, 175, 55, 0.35));
+}
+
+/* Subtitle: "रोशनी, प्रेम और अपनत्व का पावन पर्व" */
+.diwali-subtitle-hindi {
+  font-family: 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif', serif !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  word-spacing: normal;
+  line-height: 1.6 !important;
+  font-kerning: normal;
+  font-feature-settings: normal;
+  font-variant-ligatures: normal;
+  font-style: normal !important;
+  display: inline-block;
+}
+
+/* Sanskrit Greeting: "॥ श्री गणेशाय नमः ॥" */
+.ganesha-greeting {
+  font-family: 'Noto Serif Devanagari', 'Noto Sans Devanagari', 'Noto Serif', serif !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  word-spacing: normal;
+  line-height: 1.5 !important;
+  font-kerning: normal;
+  font-feature-settings: normal;
+  font-variant-ligatures: normal;
+  font-style: normal !important;
+  display: inline-block;
+}
+
+/* Gold Text Gradients */
+.gold-text-gradient {
+  background: linear-gradient(135deg, #FFF8E7 0%, #F5D77F 25%, #D4AF37 50%, #FF9933 80%, #B89225 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-text-shimmer {
+  background: linear-gradient(90deg, #D4AF37 0%, #FFF3DC 50%, #D4AF37 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: goldShimmer 4s linear infinite;
+}
+
+@keyframes goldShimmer {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+/* Royal Arch Clip Paths & Borders */
+.royal-border {
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  box-shadow: 0 0 15px rgba(212, 175, 55, 0.15), inset 0 0 15px rgba(212, 175, 55, 0.05);
+}
+
+.royal-card-glow {
+  background: linear-gradient(165deg, rgba(100, 28, 38, 0.85) 0%, rgba(59, 13, 22, 0.95) 60%, rgba(24, 11, 11, 0.98) 100%);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.8), 0 0 20px rgba(212, 175, 55, 0.15);
+  backdrop-filter: blur(12px);
+}
+
+.royal-glass {
+  background: rgba(42, 8, 15, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+}
+
+/* Diya Flame Pulsing Glow */
+.flame-core {
+  transform-origin: center bottom;
+  animation: flameFlicker 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes flameFlicker {
+  0% {
+    transform: scale(1) rotate(-1deg);
+    filter: drop-shadow(0 0 6px #FFAA55) drop-shadow(0 0 15px #FF9933);
+  }
+  25% {
+    transform: scale(1.08, 1.12) rotate(2deg);
+    filter: drop-shadow(0 0 10px #FFD700) drop-shadow(0 0 25px #FF9933);
+  }
+  50% {
+    transform: scale(0.95, 0.98) rotate(-2deg);
+    filter: drop-shadow(0 0 7px #FFAA55) drop-shadow(0 0 16px #FF8800);
+  }
+  75% {
+    transform: scale(1.05, 1.08) rotate(1deg);
+    filter: drop-shadow(0 0 12px #FFE599) drop-shadow(0 0 30px #FF9933);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 8px #FFAA55) drop-shadow(0 0 20px #FF9933);
+  }
+}
+
+/* Subtle rotating mandala */
+.spin-mandala {
+  animation: spinMandala 120s linear infinite;
+}
+
+@keyframes spinMandala {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-mandala-reverse {
+  animation: spinMandalaRev 90s linear infinite;
+}
+
+@keyframes spinMandalaRev {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+
+/* Floating animation for marigolds and diyas */
+@keyframes petalDrift {
+  0% {
+    transform: translateY(-10px) rotate(0deg) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.8;
+  }
+  90% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(105vh) rotate(360deg) translateX(40px);
+    opacity: 0;
+  }
+}
+
+.petal-animation {
+  animation-name: petalDrift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
