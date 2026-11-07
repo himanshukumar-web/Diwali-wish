@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Language } from './types';
+import { Language, PlanId, ThemeId } from './types';
 import { getPersonalGreetingParagraphs, getPersonalizedHeadings } from './data/wishesData';
+import { THEMES, getThemeById } from './data/plansData';
 import { royalAudio } from './utils/audioSynth';
 import { ParticleBackground } from './components/ParticleBackground';
 import { Navbar } from './components/Navbar';
@@ -14,6 +15,12 @@ import { SurpriseSection } from './components/SurpriseSection';
 import { ShareSection } from './components/ShareSection';
 import { FinalClosing } from './components/FinalClosing';
 import { NameModal } from './components/NameModal';
+import { PlansSection } from './components/PlansSection';
+import { CustomizationSection } from './components/CustomizationSection';
+import { PaymentModal } from './components/PaymentModal';
+import { OrderSuccessPage } from './components/OrderSuccessPage';
+import { CustomInquiryModal } from './components/CustomInquiryModal';
+import { AdminDashboard } from './components/AdminDashboard';
 import { Toast } from './components/Toast';
 
 export function App() {
@@ -24,12 +31,22 @@ export function App() {
   const [showToast, setShowToast] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
 
-  // Centralized Personalization State
+  // Navigation View State: 'home' | 'plans' | 'order-success' | 'admin'
+  const [currentView, setCurrentView] = useState<'home' | 'plans' | 'order-success' | 'admin'>('home');
+  const [successOrderId, setSuccessOrderId] = useState<string>('');
+
+  // Payment & Custom Inquiry Modals
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState<PlanId>('premium');
+  const [isCustomInquiryOpen, setIsCustomInquiryOpen] = useState<boolean>(false);
+
+  // Centralized Personalization State & Theme
   const [recipientName, setRecipientName] = useState<string>('Dear');
   const [senderName, setSenderName] = useState<string>('');
+  const [activeThemeId, setActiveThemeId] = useState<ThemeId>('maroon_gold');
   const [isNameModalOpen, setIsNameModalOpen] = useState<boolean>(false);
 
-  // Parse URL query parameter `?from=...` and saved recipient
+  // URL Routing & Query Parsing
   useEffect(() => {
     // 1. Language preference
     const savedLang = localStorage.getItem('diwali_lang') as Language;
@@ -37,31 +54,81 @@ export function App() {
       setLang(savedLang);
     }
 
-    // 2. Query param ?from=...
     if (typeof window !== 'undefined') {
-      try {
-        const urlParams = new URLSearchParams(window.location.search);
-        const fromParam = urlParams.get('from');
-        if (fromParam) {
-          const cleanSender = decodeURIComponent(fromParam).trim();
-          if (cleanSender) {
-            setSenderName(cleanSender);
-            // If opened via shared link, prompt modal for recipient name after entering
-            setIsNameModalOpen(true);
-          }
-        }
-      } catch {
-        // Safe fallback
-      }
-    }
+      const path = window.location.pathname;
+      const urlParams = new URLSearchParams(window.location.search);
 
-    // 3. Saved recipient name in local storage
-    const savedRecipient = localStorage.getItem('diwali_recipient');
-    if (savedRecipient && savedRecipient.trim()) {
-      setRecipientName(savedRecipient.trim());
-    } else if (!window.location.search.includes('from=')) {
-      // First time visitor: show prompt
-      setIsNameModalOpen(true);
+      // Check routes
+      if (path === '/plans' || path.startsWith('/plans')) {
+        setCurrentView('home');
+        setHasEntered(true);
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', '/#customize');
+        }
+        setTimeout(() => {
+          const el = document.getElementById('customize');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 200);
+      } else if (window.location.hash === '#customize') {
+        setCurrentView('home');
+        setHasEntered(true);
+        setTimeout(() => {
+          const el = document.getElementById('customize');
+          if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }, 200);
+      } else if (path === '/admin' || path.startsWith('/admin')) {
+        setCurrentView('admin');
+        setHasEntered(true);
+      } else if (path.startsWith('/order/success/')) {
+        const orderIdFromPath = path.replace('/order/success/', '').replace(/\/$/, '');
+        if (orderIdFromPath) {
+          setSuccessOrderId(orderIdFromPath);
+          setCurrentView('order-success');
+          setHasEntered(true);
+        }
+      }
+
+      // Check query params: ?order=... or ?slug=...
+      const orderParam = urlParams.get('order');
+      const slugParam = urlParams.get('slug');
+
+      if (orderParam && urlParams.get('success') === 'true') {
+        setSuccessOrderId(orderParam);
+        setCurrentView('order-success');
+        setHasEntered(true);
+      } else if (orderParam || slugParam) {
+        // Fetch customized greeting details
+        fetch(`/api/get-order?${orderParam ? `orderId=${encodeURIComponent(orderParam)}` : `slug=${encodeURIComponent(slugParam!)}`}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success && data.order) {
+              const o = data.order;
+              if (o.recipientName) setRecipientName(o.recipientName);
+              if (o.customerName) setSenderName(o.customerName);
+              if (o.theme) setActiveThemeId(o.theme as ThemeId);
+            }
+          })
+          .catch(() => {});
+      }
+
+      // Query param ?from=...
+      const fromParam = urlParams.get('from');
+      if (fromParam) {
+        const cleanSender = decodeURIComponent(fromParam).trim();
+        if (cleanSender) {
+          setSenderName(cleanSender);
+          setIsNameModalOpen(true);
+        }
+      }
+
+      // 3. Saved recipient name in local storage
+      const savedRecipient = localStorage.getItem('diwali_recipient');
+      if (savedRecipient && savedRecipient.trim()) {
+        setRecipientName(savedRecipient.trim());
+      } else if (!window.location.search.includes('from=') && !orderParam && !slugParam) {
+        // First time visitor: show prompt
+        setIsNameModalOpen(true);
+      }
     }
   }, []);
 
@@ -126,14 +193,57 @@ export function App() {
     }
   };
 
+  const handleSelectPlan = (planId: PlanId) => {
+    setSelectedPlanForPayment(planId);
+    setIsPaymentModalOpen(true);
+  };
+
+  const handlePaymentSuccess = (orderId: string) => {
+    setIsPaymentModalOpen(false);
+    setSuccessOrderId(orderId);
+    setCurrentView('order-success');
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', `/order/success/${orderId}`);
+    }
+  };
+
+  const scrollToCustomize = () => {
+    if (currentView !== 'home') {
+      setCurrentView('home');
+      setHasEntered(true);
+      if (typeof window !== 'undefined') window.history.pushState({}, '', '/#customize');
+      setTimeout(() => {
+        const el = document.getElementById('customize');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 150);
+    } else {
+      if (typeof window !== 'undefined') window.history.pushState({}, '', '#customize');
+      const el = document.getElementById('customize');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleBackToHome = () => {
+    setCurrentView('home');
+    if (typeof window !== 'undefined') window.history.pushState({}, '', '/');
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 50);
+  };
+
+  const currentTheme = getThemeById(activeThemeId);
+
   return (
-    <div className="min-h-screen bg-maroon-900 text-ivory-100 relative selection:bg-gold-500 selection:text-maroon-900">
+    <div
+      className="min-h-screen text-ivory-100 relative selection:bg-gold-500 selection:text-maroon-900 transition-colors duration-700"
+      style={{ background: currentTheme.bgGradient }}
+    >
       {/* Floating Golden Sparks, Marigold Petals & Interactive Fireworks */}
       <ParticleBackground interactive={true} />
 
       {/* Name Personalization Modal */}
       <NameModal
-        isOpen={isNameModalOpen}
+        isOpen={isNameModalOpen && currentView === 'home'}
         onClose={() => setIsNameModalOpen(false)}
         onSubmitName={handleNameSubmit}
         senderName={senderName}
@@ -141,8 +251,24 @@ export function App() {
         lang={lang}
       />
 
-      {/* Cinematic Welcome Screen */}
-      {!hasEntered && (
+      {/* Razorpay Checkout & Customer Info Modal */}
+      <PaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        selectedPlanId={selectedPlanForPayment}
+        lang={lang}
+        onPaymentSuccess={handlePaymentSuccess}
+      />
+
+      {/* Custom Inquiry Modal (₹10–₹100) */}
+      <CustomInquiryModal
+        isOpen={isCustomInquiryOpen}
+        onClose={() => setIsCustomInquiryOpen(false)}
+        lang={lang}
+      />
+
+      {/* Cinematic Welcome Screen (only on Home view) */}
+      {!hasEntered && currentView === 'home' && (
         <CinematicWelcome
           lang={lang}
           recipientName={recipientName}
@@ -151,8 +277,8 @@ export function App() {
         />
       )}
 
-      {/* Main Website Experience */}
-      {hasEntered && (
+      {/* Main App Container */}
+      {(hasEntered || currentView !== 'home') && (
         <div className="relative z-20 animate-fade-in">
           {/* Navigation Bar */}
           <Navbar
@@ -164,71 +290,115 @@ export function App() {
             recipientName={recipientName}
             senderName={senderName}
             onEditName={() => setIsNameModalOpen(true)}
+            onOpenPlans={scrollToCustomize}
+            onOpenAdmin={() => {
+              setCurrentView('admin');
+              if (typeof window !== 'undefined') window.history.pushState({}, '', '/admin');
+            }}
+            onBackToHome={handleBackToHome}
+            currentView={currentView}
           />
 
-          {/* Main Content Sections */}
-          <main>
-            {/* Hero / Auspicious Welcome */}
-            <HeroSection
+          {/* VIEW 1: Plans & Customization Page */}
+          {currentView === 'plans' && (
+            <PlansSection
               lang={lang}
-              recipientName={recipientName}
-              senderName={senderName}
-              onExploreDiyas={scrollToDiyas}
-              onEditName={() => setIsNameModalOpen(true)}
+              onSelectPlan={handleSelectPlan}
+              onCustomInquiry={() => setIsCustomInquiryOpen(true)}
+              onBackToHome={handleBackToHome}
             />
+          )}
 
-            {/* Section 3: Personalized Family Greeting */}
-            <PersonalGreeting
+          {/* VIEW 2: Order Success Page */}
+          {currentView === 'order-success' && (
+            <OrderSuccessPage
+              orderId={successOrderId}
               lang={lang}
-              recipientName={recipientName}
-              senderName={senderName}
-              onCopyWishes={handleCopyWishes}
-              copied={copied}
+              onBackToHome={handleBackToHome}
             />
+          )}
 
-            {/* Section 4: Interactive Diya Lighting Experience (9 Diyas) */}
-            <InteractiveDiyas
+          {/* VIEW 3: Admin Dashboard */}
+          {currentView === 'admin' && (
+            <AdminDashboard
               lang={lang}
+              onBackToHome={handleBackToHome}
             />
+          )}
 
-            {/* Section 5: Six Festive Wishes Cards */}
-            <FestiveCards
-              lang={lang}
-            />
+          {/* VIEW 4: Default Homepage Diwali Experience */}
+          {currentView === 'home' && (
+            <main>
+              {/* Hero / Auspicious Welcome */}
+              <HeroSection
+                lang={lang}
+                recipientName={recipientName}
+                senderName={senderName}
+                onExploreDiyas={scrollToDiyas}
+                onEditName={() => setIsNameModalOpen(true)}
+              />
 
-            {/* Section 6: Indian Cultural Festive Gallery (With High-Resolution Verified Images & Fallbacks) */}
-            <CulturalGallery
-              lang={lang}
-            />
+              {/* Section 3: Personalized Family Greeting */}
+              <PersonalGreeting
+                lang={lang}
+                recipientName={recipientName}
+                senderName={senderName}
+                onCopyWishes={handleCopyWishes}
+                copied={copied}
+              />
 
-            {/* Section 7: Special Surprise Section */}
-            <SurpriseSection
-              lang={lang}
-              recipientName={recipientName}
-              senderName={senderName}
-            />
+              {/* Section 4: Interactive Diya Lighting Experience (9 Diyas) */}
+              <InteractiveDiyas
+                lang={lang}
+              />
 
-            {/* Section 8: Dedicated Personalized Sharing Section */}
-            <ShareSection
-              lang={lang}
-              currentUserName={recipientName}
-              onCopySuccess={() =>
-                triggerToast(
-                  lang === 'hi'
-                    ? '✨ पर्सनलाइज़्ड लिंक कॉपी हो गया! अब अपनों के साथ साझा करें।'
-                    : '✨ Personalized link copied! Share with your loved ones.'
-                )
-              }
-            />
+              {/* Section 5: Six Festive Wishes Cards */}
+              <FestiveCards
+                lang={lang}
+              />
 
-            {/* Section 10: Final Closing Section, Sender Signature & Creator Credit */}
-            <FinalClosing
-              lang={lang}
-              recipientName={recipientName}
-              senderName={senderName}
-              onReplayWelcome={() => setHasEntered(false)}
-            />
-          </main>
+              {/* Section 6: Indian Cultural Festive Gallery */}
+              <CulturalGallery
+                lang={lang}
+              />
+
+              {/* Section 7: Special Surprise Section */}
+              <SurpriseSection
+                lang={lang}
+                recipientName={recipientName}
+                senderName={senderName}
+              />
+
+              {/* Section 8: Dedicated Personalized Sharing Section */}
+              <ShareSection
+                lang={lang}
+                currentUserName={recipientName}
+                onCopySuccess={() =>
+                  triggerToast(
+                    lang === 'hi'
+                      ? '✨ पर्सनलाइज़्ड लिंक कॉपी हो गया! अब अपनों के साथ साझा करें।'
+                      : '✨ Personalized link copied! Share with your loved ones.'
+                  )
+                }
+              />
+
+              {/* Section 9: Complete Personalized Royal Diwali Customization & Plans */}
+              <CustomizationSection
+                id="customize"
+                lang={lang}
+                onPaymentSuccess={handlePaymentSuccess}
+                onCustomInquiry={() => setIsCustomInquiryOpen(true)}
+              />
+
+              {/* Section 10: Final Closing Section & Sender Signature */}
+              <FinalClosing
+                lang={lang}
+                recipientName={recipientName}
+                senderName={senderName}
+                onReplayWelcome={() => setHasEntered(false)}
+              />
+            </main>
+          )}
         </div>
       )}
 

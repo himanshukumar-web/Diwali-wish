@@ -130,7 +130,7 @@ export const ShareSection: React.FC<ShareSectionProps> = ({
               type="text"
               value={senderNameInput}
               onChange={(e) => setSenderNameInput(e.target.value)}
-              placeholder={lang === 'hi' ? 'अपना नाम यहाँ लिखें (उदा. राहुल)...' : 'Enter your name (e.g. Rahul)...'}
+              placeholder={lang === 'hi' ? 'अपना नाम यहाँ लिखें (उदा. हिमांशु कुमार)...' : 'Enter your name (e.g. Himanshu Kumar)...'}
               maxLength={40}
               style={{
                 backgroundColor: '#FFFFFF',

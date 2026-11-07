@@ -12,6 +12,10 @@ interface NavbarProps {
   recipientName: string;
   senderName: string;
   onEditName: () => void;
+  onOpenPlans?: () => void;
+  onOpenAdmin?: () => void;
+  onBackToHome?: () => void;
+  currentView?: 'home' | 'plans' | 'order-success' | 'admin';
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -23,6 +27,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   recipientName,
   senderName,
   onEditName,
+  onOpenPlans,
+  onOpenAdmin,
+  onBackToHome,
+  currentView = 'home',
 }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -33,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       setIsScrolled(window.scrollY > 40);
 
       // Detect active section
-      const sections = ['home', 'wishes', 'diyas', 'gallery', 'surprise', 'share', 'closing'];
+      const sections = ['home', 'wishes', 'diyas', 'gallery', 'surprise', 'share', 'customize', 'closing'];
       for (const section of sections) {
         const el = document.getElementById(section);
         if (el) {
@@ -76,6 +84,15 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const handleHomeClick = () => {
+    setMobileMenuOpen(false);
+    if (currentView !== 'home') {
+      onBackToHome?.();
+    } else {
+      scrollTo('home');
+    }
+  };
+
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
@@ -88,7 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Brand Logo & Recipient Dedicated Badge */}
         <div className="flex items-center space-x-2 text-left">
           <button
-            onClick={() => scrollTo('home')}
+            onClick={handleHomeClick}
             className="flex items-center space-x-2 text-left focus:outline-none group"
           >
             <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-gold-600 to-amber-300 flex items-center justify-center p-0.5 shadow-gold-glow">
@@ -122,9 +139,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {navLinks.map((link) => (
             <button
               key={link.id}
-              onClick={() => scrollTo(link.id)}
+              onClick={() => {
+                if (currentView !== 'home') {
+                  onBackToHome?.();
+                  setTimeout(() => scrollTo(link.id), 150);
+                } else {
+                  scrollTo(link.id);
+                }
+              }}
               className={`px-3 py-1.5 rounded-full text-xs xl:text-sm font-medium transition-all duration-200 ${
-                activeSection === link.id
+                activeSection === link.id && currentView === 'home'
                   ? 'bg-gold-500/20 text-gold-300 border border-gold-500/50 shadow-sm'
                   : 'text-ivory-100/80 hover:text-gold-300 hover:bg-maroon-700/40'
               }`}
@@ -134,6 +158,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </button>
           ))}
+
+          {/* Plans & Customization Link */}
+          {onOpenPlans && (
+            <button
+              onClick={onOpenPlans}
+              className={`px-3.5 py-1.5 rounded-full text-xs xl:text-sm font-bold transition-all duration-200 flex items-center space-x-1.5 ${
+                activeSection === 'customize' || currentView === 'plans'
+                  ? 'bg-gradient-to-r from-amber-400 to-gold-400 text-maroon-950 shadow-gold-glow'
+                  : 'bg-gold-500/15 hover:bg-gold-500/25 text-gold-300 border border-gold-400/50'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-gold-400" />
+              <span className={lang === 'hi' ? 'font-devanagari' : ''}>
+                {lang === 'hi' ? 'योजनाएँ व कस्टमाइज़' : 'Plans & Customization'}
+              </span>
+            </button>
+          )}
         </nav>
 
         {/* Action Controls: Language Toggle, Music Player, Share, Copy */}
@@ -224,12 +265,48 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Drawer Menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden bg-maroon-900/98 border-b border-gold-500/40 px-4 pt-3 pb-6 space-y-2 backdrop-blur-xl animate-fade-in shadow-2xl">
+          {onOpenPlans && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenPlans();
+              }}
+              className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold border flex items-center justify-between shadow-md mb-2 ${
+                activeSection === 'customize' || currentView === 'plans'
+                  ? 'bg-gradient-to-r from-amber-400 to-gold-400 text-maroon-950 border-gold-400 shadow-gold-glow'
+                  : 'bg-gradient-to-r from-gold-500/30 to-amber-500/20 border-gold-400/60 text-gold-200'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-4 h-4" />
+                <span className={lang === 'hi' ? 'font-devanagari' : ''}>
+                  {lang === 'hi' ? 'राजसी योजनाएँ व कस्टमाइज़' : 'Plans & Customization'}
+                </span>
+              </div>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                activeSection === 'customize' || currentView === 'plans'
+                  ? 'bg-maroon-950 text-gold-300'
+                  : 'bg-gold-400 text-maroon-950'
+              }`}>
+                ₹10–₹99
+              </span>
+            </button>
+          )}
+
           {navLinks.map((link) => (
             <button
               key={link.id}
-              onClick={() => scrollTo(link.id)}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                if (currentView !== 'home') {
+                  onBackToHome?.();
+                  setTimeout(() => scrollTo(link.id), 150);
+                } else {
+                  scrollTo(link.id);
+                }
+              }}
               className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium flex items-center justify-between ${
-                activeSection === link.id
+                activeSection === link.id && currentView === 'home'
                   ? 'bg-gold-500/20 text-gold-300 border border-gold-500/40'
                   : 'text-ivory-100 hover:bg-maroon-800/60'
               }`}
@@ -240,6 +317,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Sparkles className="w-3.5 h-3.5 text-gold-400 opacity-60" />
             </button>
           ))}
+
+          {onOpenAdmin && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onOpenAdmin();
+              }}
+              className="w-full text-left px-4 py-2 rounded-lg text-xs font-semibold text-gold-400/70 hover:text-gold-200"
+            >
+              🔒 Admin Dashboard
+            </button>
+          )}
           <div className="pt-3 border-t border-gold-500/20 flex items-center justify-between">
             <button
               onClick={handleShareWhatsApp}
