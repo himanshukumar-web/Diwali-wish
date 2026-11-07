@@ -21,12 +21,13 @@ import {
   Lock,
   Globe,
   Info,
-  Copy
+  Copy,
+  Download
 } from 'lucide-react';
 import { Language, PlanId, ThemeId, CustomerFormData } from '../types';
 import { PLANS, THEMES, getPlanById } from '../data/plansData';
 import { CornerOrnament, OrnateDivider, DiyaGraphic } from './DecorativeBorders';
-import { generateCardSvg } from '../utils/cardGenerator';
+import { generateCardSvg, svgToPngBlob, downloadBlob } from '../utils/cardGenerator';
 
 interface CustomizationSectionProps {
   id?: string;
@@ -66,6 +67,8 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [copiedUpi, setCopiedUpi] = useState(false);
+  const [isDownloadingPreview, setIsDownloadingPreview] = useState(false);
+  const [downloadFeedback, setDownloadFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleCopyUpi = () => {
     if (navigator.clipboard) {
@@ -73,6 +76,39 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
         setCopiedUpi(true);
         setTimeout(() => setCopiedUpi(false), 2500);
       });
+    }
+  };
+
+  const handleDownloadPreviewCard = async () => {
+    setIsDownloadingPreview(true);
+    setDownloadFeedback(null);
+
+    try {
+      const pngBlob = await svgToPngBlob(previewSvg, 1080, 1350);
+      const safeName = (formData.recipientName || 'Himanshu')
+        .trim()
+        .replace(/[^\w\u0900-\u097F-]+/g, '_')
+        .slice(0, 30) || 'Greeting';
+      const filename = `Diwali-Greeting-${safeName}.png`;
+      downloadBlob(pngBlob, filename);
+
+      setDownloadFeedback({
+        type: 'success',
+        message: lang === 'hi'
+          ? 'निःशुल्क पूर्वावलोकन कार्ड (1080x1350 PNG) सफलतापूर्वक डाउनलोड हुआ! बिना वाटरमार्क अल्ट्रा-एचडी कार्ड अनलॉक करने के लिए कोई भी प्लान चुनें।'
+          : 'Free preview card (1080x1350 PNG) downloaded successfully! Unlock watermark-free ultra-HD card with any plan.'
+      });
+      setTimeout(() => setDownloadFeedback(null), 6000);
+    } catch (err: any) {
+      console.error('Preview card download error:', err);
+      setDownloadFeedback({
+        type: 'error',
+        message: lang === 'hi'
+          ? 'कार्ड डाउनलोड करने में त्रुटि आई। कृपया पुनः प्रयास करें।'
+          : 'Failed to generate PNG greeting card. Please try again.'
+      });
+    } finally {
+      setIsDownloadingPreview(false);
     }
   };
 
@@ -898,35 +934,77 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
               </div>
             </div>
 
-            {/* SVG Render Container with Right-Click Protection */}
-            <div
-              onContextMenu={(e) => e.preventDefault()}
-              className="relative w-full rounded-2xl overflow-hidden border-2 border-gold-400/50 shadow-2xl bg-black select-none"
-              style={{
-                userSelect: 'none',
-                WebkitUserSelect: 'none'
-              }}
-            >
+            {/* Proportional Portrait 4:5 Greeting Card Canvas (1080x1350) */}
+            <div className="flex justify-center w-full my-4">
               <div
-                className="w-full h-auto"
-                dangerouslySetInnerHTML={{ __html: previewSvg }}
-              />
-
-              {/* Watermark Protection overlay shield to discourage simple browser right-click save */}
-              <div
-                className="absolute inset-0 pointer-events-none border border-gold-400/30 rounded-2xl"
+                onContextMenu={(e) => e.preventDefault()}
+                className="relative w-full max-w-[440px] sm:max-w-[480px] aspect-[4/5] rounded-3xl overflow-hidden border-2 border-gold-400/60 shadow-2xl bg-black select-none transition-all flex items-center justify-center"
                 style={{
-                  background: 'radial-gradient(circle at 50% 50%, transparent 60%, rgba(24, 11, 11, 0.4) 100%)'
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none'
                 }}
-              ></div>
+              >
+                <div
+                  className="w-full h-full flex items-center justify-center [&>svg]:w-full [&>svg]:h-full [&>svg]:object-contain"
+                  dangerouslySetInnerHTML={{ __html: previewSvg }}
+                />
+
+                {/* Subtle protective ambient edge glow */}
+                <div
+                  className="absolute inset-0 pointer-events-none rounded-3xl border border-gold-400/20"
+                  style={{
+                    background: 'radial-gradient(circle at 50% 50%, transparent 65%, rgba(10, 4, 6, 0.3) 100%)'
+                  }}
+                />
+              </div>
             </div>
 
-            <div className="mt-4 p-3 rounded-xl bg-maroon-950/70 border border-gold-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gold-300">
-              <span className="text-center sm:text-left">
-                {lang === 'hi'
-                  ? '✨ यह आपका लाइव पूर्वावलोकन है। नाम, भाषा या संदेश बदलने पर यह तुरंत अपडेट होता है।'
-                  : '✨ This is your live preview. It automatically updates when you change names, language, theme, or message above.'}
-              </span>
+            {/* Download Feedback Notification */}
+            {downloadFeedback && (
+              <div
+                className={`max-w-md mx-auto mb-3 p-3 rounded-xl border text-xs font-semibold flex items-center justify-center space-x-2 transition ${
+                  downloadFeedback.type === 'success'
+                    ? 'bg-emerald-500/15 border-emerald-400/50 text-emerald-300'
+                    : 'bg-rose-500/15 border-rose-400/50 text-rose-300'
+                }`}
+              >
+                {downloadFeedback.type === 'success' ? (
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                )}
+                <span>{downloadFeedback.message}</span>
+              </div>
+            )}
+
+            {/* Working Download Greeting Card Button & Actions */}
+            <div className="mt-4 p-4 rounded-2xl bg-maroon-950/80 border border-gold-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gold-300">
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadPreviewCard}
+                  disabled={isDownloadingPreview}
+                  className="px-6 py-2.5 rounded-full font-bold text-xs sm:text-sm text-maroon-950 bg-gradient-to-r from-gold-300 via-gold-400 to-amber-500 hover:from-gold-200 hover:to-amber-400 shadow-gold-glow flex items-center space-x-2 transition transform hover:-translate-y-0.5 disabled:opacity-60"
+                  title="Download 1080x1350 PNG Greeting Card"
+                >
+                  {isDownloadingPreview ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-maroon-950" />
+                      <span>{lang === 'hi' ? 'कार्ड तैयार हो रहा है...' : 'Generating PNG...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-3.5 h-3.5 text-maroon-950" />
+                      <span className={lang === 'hi' ? 'font-devanagari font-bold' : 'font-heading font-bold'}>
+                        {lang === 'hi' ? 'डाउनलोड शुभकामना कार्ड (PNG)' : 'Download Greeting Card (PNG)'}
+                      </span>
+                    </>
+                  )}
+                </button>
+                <span className="text-[11px] text-gold-400/80 hidden md:inline">
+                  (1080 × 1350 High-Res)
+                </span>
+              </div>
 
               <button
                 type="button"
@@ -938,7 +1016,7 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
                 }}
                 className="inline-flex items-center space-x-1 font-bold text-amber-300 hover:text-amber-100 transition whitespace-nowrap"
               >
-                <span>{lang === 'hi' ? `₹${currentPlan.priceInInr} में अनलॉक करें →` : `Unlock Clean Card for ₹${currentPlan.priceInInr} →`}</span>
+                <span>{lang === 'hi' ? `₹${currentPlan.priceInInr} में बिना वाटरमार्क अनलॉक करें →` : `Unlock Clean Card for ₹${currentPlan.priceInInr} →`}</span>
               </button>
             </div>
           </div>

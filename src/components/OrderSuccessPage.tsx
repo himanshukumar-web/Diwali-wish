@@ -112,14 +112,22 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
     setIsDownloading(true);
 
     try {
-      const pngBlob = await svgToPngBlob(cardSvg);
-      const filename = `Diwali_Greeting_${(order.recipientName || 'Family').replace(/\s+/g, '_')}.png`;
+      const pngBlob = await svgToPngBlob(cardSvg, 1080, 1350);
+      const safeName = (order.recipientName || 'Himanshu')
+        .trim()
+        .replace(/[^\w\u0900-\u097F-]+/g, '_')
+        .slice(0, 30) || 'Family';
+      const filename = `Diwali-Greeting-${safeName}.png`;
       downloadBlob(pngBlob, filename);
     } catch (err) {
       console.error('Card download error:', err);
       // Fallback: download raw SVG if canvas conversion fails
+      const safeName = (order.recipientName || 'Himanshu')
+        .trim()
+        .replace(/[^\w\u0900-\u097F-]+/g, '_')
+        .slice(0, 30) || 'Family';
       const svgBlob = new Blob([cardSvg], { type: 'image/svg+xml;charset=utf-8' });
-      downloadBlob(svgBlob, `Diwali_Greeting_${(order.recipientName || 'Family').replace(/\s+/g, '_')}.svg`);
+      downloadBlob(svgBlob, `Diwali-Greeting-${safeName}.svg`);
     } finally {
       setIsDownloading(false);
     }
@@ -251,22 +259,23 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
           </div>
         </div>
 
-        {/* LIVE INLINE CARD PREVIEW (Clean Paid Card, Zero Free-Watermark) */}
-        <div className="my-8 max-w-2xl mx-auto text-left">
+        {/* LIVE INLINE CARD PREVIEW (Clean Paid Card, Zero Free-Watermark, 1080x1350) */}
+        <div className="my-8 max-w-[460px] sm:max-w-[480px] mx-auto text-left">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-gold-300 uppercase tracking-wider flex items-center space-x-1.5">
               <Sparkles className="w-3.5 h-3.5 text-gold-400" />
               <span>Your Clean High-Resolution Greeting Card</span>
             </span>
             <span className="text-[11px] text-emerald-400 font-semibold">
-              ✓ Watermark-Free
+              ✓ 1080 × 1350 • Clean
             </span>
           </div>
 
-          <div
-            className="rounded-2xl overflow-hidden border-2 border-gold-400/50 shadow-2xl bg-black"
-            dangerouslySetInnerHTML={{ __html: cardSvg }}
-          />
+          <div className="relative w-full aspect-[4/5] rounded-3xl overflow-hidden border-2 border-gold-400/60 shadow-2xl bg-black flex items-center justify-center [&>div]:w-full [&>div]:h-full [&>div>svg]:w-full [&>div>svg]:h-full [&>div>svg]:object-contain">
+            <div
+              dangerouslySetInnerHTML={{ __html: cardSvg }}
+            />
+          </div>
         </div>
 
         <OrnateDivider className="max-w-xs mx-auto mb-8" />

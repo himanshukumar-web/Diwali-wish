@@ -12,6 +12,7 @@ import {
   getAllInquiries
 } from '../api/_shared/db';
 import { generateWebsiteSlug, generateWebsiteUrl, generateCardSvg, uploadCardToStorage } from '../api/_shared/generator';
+import { formatRecipientLine, formatSenderLine } from '../api/_shared/cardGenerator';
 import { sendWhatsAppGreeting, formatWhatsAppPhone, buildWhatsAppMessageText } from '../api/_shared/whatsapp';
 import { SERVER_PLANS } from '../api/_shared/plans';
 import { OrderRecord, PlanId, ThemeId } from '../api/_shared/types';
@@ -209,10 +210,36 @@ async function runTestSuite() {
   await markWebhookEventProcessed(eventId, 'payment.captured');
   assert((await isWebhookEventProcessed(eventId)) === true, 'Webhook event deduplication prevents duplicate event processing');
 
-  // TEST 7: Free Watermarked Greeting Card Preview & Watermark Protection
-  console.log('\n--- TEST GROUP 7: Free Watermarked Preview & Subtle Watermark Protection ---');
+  // TEST 7: Portrait 4:5 Greeting Card Canvas (1080x1350) & Duplicate Text Prevention
+  console.log('\n--- TEST GROUP 7: Portrait 4:5 Card (1080x1350) & Duplicate Text Prevention ---');
   
-  // 7a: Free Preview with Hindi Names
+  // 7a: Duplicate "Dear Dear" prevention
+  const cleanRecipientDear = formatRecipientLine('Dear', 'en');
+  assert(!cleanRecipientDear.includes('Dear Dear'), 'Input "Dear" does not produce "Dear Dear": ' + cleanRecipientDear);
+  assert(cleanRecipientDear === 'To You & Your Wonderful Family', 'Default "Dear" formats as "To You & Your Wonderful Family"');
+
+  const cleanRecipientDearName = formatRecipientLine('Dear Sharma Family', 'en');
+  assert(!cleanRecipientDearName.includes('Dear Dear'), 'Input "Dear Sharma Family" avoids duplicate Dear: ' + cleanRecipientDearName);
+
+  const cleanRecipientHi = formatRecipientLine('प्रिय', 'hi');
+  assert(!cleanRecipientHi.includes('प्रिय प्रिय'), 'Input "प्रिय" does not produce "प्रिय प्रिय": ' + cleanRecipientHi);
+
+  const cleanSender = formatSenderLine('With Love Himanshu', 'en');
+  assert(!cleanSender.includes('With Love: With Love'), 'Sender line prevents duplicate "With Love": ' + cleanSender);
+
+  // 7b: Fixed 4:5 Portrait Dimensions (1080x1350)
+  const portraitSvg = generateCardSvg({
+    recipientName: 'Dear Sharma Family',
+    senderName: 'Himanshu Kumar',
+    theme: 'maroon_gold',
+    lang: 'en',
+    isWatermarked: true
+  });
+  assert(portraitSvg.includes('viewBox="0 0 1080 1350"'), 'Card canvas uses fixed 4:5 portrait viewBox 1080x1350');
+  assert(portraitSvg.includes('width="1080" height="1350"'), 'Card canvas has exact dimensions 1080x1350');
+  assert(!portraitSvg.includes('Dear Dear'), 'Rendered SVG contains no duplicate "Dear Dear"');
+
+  // 7c: Free Preview with Hindi Names
   const hindiPreviewSvg = generateCardSvg({
     recipientName: 'आदित्य व परिवार',
     senderName: 'हिमांशु कुमार',
@@ -226,20 +253,7 @@ async function runTestSuite() {
   assert(hindiPreviewSvg.includes('Designed &amp; Developed by Himanshu Kumar'), 'Hindi preview renders diagonal watermark');
   assert(hindiPreviewSvg.includes('FREE PREVIEW'), 'Hindi preview contains FREE PREVIEW watermark and banner');
 
-  // 7b: Free Preview with English Names
-  const englishPreviewSvg = generateCardSvg({
-    recipientName: 'Dear Sharma Family',
-    senderName: 'Himanshu Kumar',
-    greetingMessage: 'May the divine light of Diwali illuminate your home with prosperity and happiness!',
-    theme: 'royal_purple',
-    lang: 'en',
-    isWatermarked: true
-  });
-  assert(englishPreviewSvg.includes('Dear Sharma Family'), 'English preview renders custom recipient name');
-  assert(englishPreviewSvg.includes('Himanshu Kumar'), 'English preview renders sender name');
-  assert(englishPreviewSvg.includes('FREE PREVIEW'), 'English preview renders watermark notice');
-
-  // 7c: All 4 Royal Themes
+  // 7d: All 4 Royal Themes in 1080x1350
   const themesList: ThemeId[] = ['maroon_gold', 'royal_purple', 'saffron_cream', 'emerald_green'];
   for (const tId of themesList) {
     const tSvg = generateCardSvg({
@@ -248,10 +262,10 @@ async function runTestSuite() {
       theme: tId,
       isWatermarked: true
     });
-    assert(tSvg.includes('<svg') && tSvg.includes('॥ शुभ दीपावली ॥'), `Theme "${tId}" generates valid SVG with Devanagari header`);
+    assert(tSvg.includes('viewBox="0 0 1080 1350"') && tSvg.includes('॥ शुभ दीपावली ॥'), `Theme "${tId}" generates valid 1080x1350 SVG with Devanagari header`);
   }
 
-  // 7d: Paid Card (Clean, Unwatermarked)
+  // 7e: Paid Card (Clean, Unwatermarked)
   const paidCardSvg = generateCardSvg({
     recipientName: 'Pooja & Family',
     senderName: 'Himanshu Kumar',
