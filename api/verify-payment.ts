@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyPaymentSignature } from './_shared/razorpay';
 import { getOrderById, getOrderByRazorpayOrderId, saveOrder } from './_shared/db';
 import { generateWebsiteSlug, generateWebsiteUrl, generateCardSvg, uploadCardToStorage } from './_shared/generator';
+import { sendWhatsAppGreeting } from './_shared/whatsapp';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -98,9 +99,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     order.website_slug = slug;
     order.website_url = websiteUrl;
 
-    // 7. Generate downloadable festive card SVG / PNG
+    // 7. Generate downloadable festive card SVG / PNG (strictly clean, unwatermarked for paid orders)
     try {
-      const cardSvg = generateCardSvg(order);
+      const cardSvg = generateCardSvg({
+        ...order,
+        isWatermarked: false
+      });
       const storageUrl = await uploadCardToStorage(order.id, cardSvg);
       if (storageUrl) {
         order.card_storage_path = storageUrl;
@@ -108,6 +112,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (cardErr) {
       console.warn('Card upload warning:', cardErr);
       // Non-fatal: website is fulfilled; card can also be rendered/downloaded in browser
+    }
+
+    // 8. Automated WhatsApp Business Cloud API Delivery (with graceful fallback)
+    try {
+      const whatsappResult = await sendWhatsAppGreeting({
+        customerPhone: order.customer_whatsapp,
+        customerName: order.customer_name,
+        recipientName: order.recipient_name,
+        greetingMessage: order.greeting_message,
+        websiteUrl: order.website_url,
+        cardImageUrl: order.card_storage_path,
+        lang: 'hi'
+      });
+
+      order.whatsapp_delivery_status = whatsappResult.status;
+      if (whatsappResult.messageId) {
+        order.whatsapp_message_id = whatsappResult.messageId;
+      }
+      if (whatsappResult.error && whatsappResult.status === 'failed') {
+        order.whatsapp_error = whatsappResult.error;
+      }
+    } catch (waErr: any) {
+      console.warn('WhatsApp dispatch warning:', waErr.message);
+      order.whatsapp_delivery_status = 'pending_configuration';
     }
 
     order.updated_at = new Date().toISOString();
@@ -119,7 +147,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       verified: true,
       websiteUrl: order.website_url,
       websiteSlug: order.website_slug,
-      cardDownloadUrl: order.card_storage_path || undefined
+      cardDownloadUrl: order.card_storage_path || undefined,
+      whatsappDelivery: {
+        status: order.whatsapp_delivery_status,
+        messageId: order.whatsapp_message_id || null,
+        error: order.whatsapp_error || null
+      }
     });
   } catch (err: any) {
     console.error('Error in /api/verify-payment:', err);

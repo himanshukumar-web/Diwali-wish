@@ -1,5 +1,6 @@
 export type PlanId = 'basic' | 'premium' | 'royal';
 export type ThemeId = 'maroon_gold' | 'royal_purple' | 'saffron_cream' | 'emerald_green';
+export type WhatsAppDeliveryStatus = 'sent' | 'pending_configuration' | 'failed' | 'not_requested';
 
 export interface OrderRecord {
   id: string;
@@ -21,6 +22,9 @@ export interface OrderRecord {
   website_slug?: string;
   website_url?: string;
   card_storage_path?: string;
+  whatsapp_delivery_status?: WhatsAppDeliveryStatus;
+  whatsapp_message_id?: string;
+  whatsapp_error?: string;
   created_at?: string;
   updated_at?: string;
 }

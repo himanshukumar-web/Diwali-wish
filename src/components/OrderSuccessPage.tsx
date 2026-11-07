@@ -1,11 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import confetti from 'canvas-confetti';
-import { CheckCircle2, ExternalLink, Download, Share2, Sparkles, Copy, Check, RefreshCw, MessageCircle, ArrowLeft } from 'lucide-react';
-import { Language, PlanId, ThemeId } from '../types';
-import { PLANS, THEMES, getPlanById } from '../data/plansData';
-import { CornerOrnament, OrnateDivider, DiyaGraphic } from './DecorativeBorders';
-import { generateCardSvg } from '../utils/cardGenerator';
+import {
+  CheckCircle2,
+  ExternalLink,
+  Download,
+  Copy,
+  Check,
+  RefreshCw,
+  MessageCircle,
+  ArrowLeft,
+  Sparkles,
+  ShieldCheck,
+  Image as ImageIcon,
+  Send,
+  AlertTriangle
+} from 'lucide-react';
+import { Language, ThemeId } from '../types';
+import { THEMES, getPlanById } from '../data/plansData';
+import { CornerOrnament, OrnateDivider } from './DecorativeBorders';
+import { generateCardSvg, svgToPngBlob, downloadBlob } from '../utils/cardGenerator';
 
 interface OrderSuccessPageProps {
   orderId: string;
@@ -37,7 +51,7 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
           setIsLoading(false);
 
           if (data.order.paymentVerified) {
-            // Trigger celebratory golden confetti
+            // Trigger celebratory royal confetti
             confetti({
               particleCount: 160,
               spread: 90,
@@ -58,7 +72,7 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
 
     fetchOrder();
 
-    // Poll every 3 seconds if pending
+    // Poll every 3 seconds if pending verification
     intervalId = setInterval(() => {
       if (!order || !order.paymentVerified) {
         fetchOrder();
@@ -70,6 +84,20 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
     };
   }, [orderId]);
 
+  // Generate the clean, unwatermarked high-res SVG for this order
+  const cardSvg = useMemo(() => {
+    if (!order) return '';
+    return generateCardSvg({
+      id: order.id,
+      customer_name: order.customerName,
+      recipient_name: order.recipientName,
+      greeting_message: order.greetingMessage,
+      theme: order.theme,
+      lang: lang,
+      isWatermarked: false // Clean, watermark-free for paid customers
+    });
+  }, [order, lang]);
+
   const handleCopyLink = () => {
     if (order?.websiteUrl && navigator.clipboard) {
       navigator.clipboard.writeText(order.websiteUrl).then(() => {
@@ -80,59 +108,19 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
   };
 
   const handleDownloadCard = async () => {
-    if (!order) return;
+    if (!order || !cardSvg) return;
     setIsDownloading(true);
 
     try {
-      // 1. Generate full SVG string for this order
-      const cardSvg = generateCardSvg({
-        id: order.id,
-        customer_name: order.customerName,
-        customer_whatsapp: '',
-        recipient_name: order.recipientName,
-        greeting_message: order.greetingMessage,
-        theme: order.theme,
-        plan_id: order.planId,
-        amount: order.amount,
-        currency: order.currency || 'INR',
-        payment_status: 'paid',
-        payment_verified: true,
-        website_slug: order.websiteSlug,
-        website_url: order.websiteUrl,
-        created_at: order.createdAt,
-        updated_at: order.createdAt
-      });
-
-      // 2. Render SVG onto an HTML5 Canvas to produce high-resolution PNG (1200x800)
-      const blob = new Blob([cardSvg], { type: 'image/svg+xml;charset=utf-8' });
-      const URL = window.URL || window.webkitURL || window;
-      const blobURL = URL.createObjectURL(blob);
-
-      const image = new Image();
-      image.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1200;
-        canvas.height = 800;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(image, 0, 0);
-          const pngUrl = canvas.toDataURL('image/png');
-          const downloadLink = document.createElement('a');
-          downloadLink.href = pngUrl;
-          downloadLink.download = `Diwali_Greeting_${order.recipientName || 'Card'}.png`;
-          document.body.appendChild(downloadLink);
-          downloadLink.click();
-          document.body.removeChild(downloadLink);
-          URL.revokeObjectURL(blobURL);
-        }
-        setIsDownloading(false);
-      };
-      image.onerror = () => {
-        setIsDownloading(false);
-      };
-      image.src = blobURL;
+      const pngBlob = await svgToPngBlob(cardSvg);
+      const filename = `Diwali_Greeting_${(order.recipientName || 'Family').replace(/\s+/g, '_')}.png`;
+      downloadBlob(pngBlob, filename);
     } catch (err) {
       console.error('Card download error:', err);
+      // Fallback: download raw SVG if canvas conversion fails
+      const svgBlob = new Blob([cardSvg], { type: 'image/svg+xml;charset=utf-8' });
+      downloadBlob(svgBlob, `Diwali_Greeting_${(order.recipientName || 'Family').replace(/\s+/g, '_')}.svg`);
+    } finally {
       setIsDownloading(false);
     }
   };
@@ -141,12 +129,12 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
     if (!order) return;
     const shareUrl = order.websiteUrl || `${window.location.origin}/?order=${order.id}`;
     const text =
-      `🪔 ॥ शुभ दीपावली ॥ ✨\n\n` +
-      `प्रिय ${order.recipientName} और आपके पूरे परिवार को दीपावली की हार्दिक शुभकामनाएँ! ❤️\n\n` +
+      `🪔 *॥ शुभ दीपावली ॥* ✨\n\n` +
+      `प्रिय *${order.recipientName}* और आपके पूरे परिवार को दीपावली की हार्दिक शुभकामनाएँ! ❤️\n\n` +
       `"${order.greetingMessage}"\n\n` +
-      `✨ ${order.customerName} की तरफ से आपके लिए तैयार की गई विशेष राजसी दीपावली विशिंग वेबसाइट यहाँ देखें:\n` +
-      `${shareUrl}\n\n` +
-      `🎨 Designed & Developed by Himanshu Kumar\nWith Love ❤️`;
+      `✨ *${order.customerName}* की तरफ से आपके लिए तैयार की गई विशेष राजसी दीपावली विशिंग वेबसाइट यहाँ देखें:\n` +
+      `👉 ${shareUrl}\n\n` +
+      `🎨 *Designed & Developed by Himanshu Kumar*\nWith Love ❤️`;
 
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -188,28 +176,53 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
 
   const plan = getPlanById(order.planId);
   const theme = THEMES[order.theme as ThemeId] || THEMES.maroon_gold;
+  const isPaid = order.paymentVerified || order.paymentStatus === 'paid';
 
   return (
     <div className="min-h-screen pt-24 pb-20 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto relative z-20 text-center">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="royal-card-glow rounded-3xl p-6 sm:p-10 md:p-12 border-2 border-gold-400/60 shadow-2xl relative overflow-hidden"
+        className="royal-card-glow rounded-3xl p-6 sm:p-10 border-2 border-gold-400/60 shadow-2xl relative overflow-hidden"
       >
         <CornerOrnament position="top-left" className="absolute top-2 left-2 w-8 h-8 opacity-80" />
         <CornerOrnament position="top-right" className="absolute top-2 right-2 w-8 h-8 opacity-80" />
 
-        {/* Success Badge */}
+        {/* Success Icon */}
         <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
           <CheckCircle2 className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-400" />
         </div>
 
-        <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-xs font-semibold mb-3">
-          <span>✓ {lang === 'hi' ? 'भुगतान सत्यापित एवं सफल' : 'Payment Verified & Captured (Test Mode)'}</span>
+        {/* 3 Status Badges: Payment, Card Generation, WhatsApp Delivery */}
+        <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
+          {/* 1. Payment Status */}
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-xs font-semibold">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{isPaid ? 'Payment Verified & Captured (Test Mode)' : 'Payment Processing'}</span>
+          </div>
+
+          {/* 2. Card Status */}
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-gold-500/15 border border-gold-400/40 text-gold-300 text-xs font-semibold">
+            <ImageIcon className="w-3.5 h-3.5 text-gold-400" />
+            <span>High-Res Greeting Card Ready</span>
+          </div>
+
+          {/* 3. WhatsApp Delivery Status */}
+          {order.whatsappDeliveryStatus === 'sent' ? (
+            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-xs font-semibold">
+              <Send className="w-3.5 h-3.5 text-emerald-400" />
+              <span>WhatsApp Dispatched (ID: {order.whatsappMessageId?.slice(-8)})</span>
+            </div>
+          ) : (
+            <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 text-xs font-semibold">
+              <MessageCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>WhatsApp API: Pending Server Setup (1-Click Share Ready)</span>
+            </div>
+          )}
         </div>
 
         <h1 className={lang === 'hi' ? 'font-devanagari font-bold text-3xl sm:text-4xl gold-text-gradient mb-2' : 'font-heading font-extrabold text-3xl sm:text-4xl gold-text-gradient mb-2'}>
-          {lang === 'hi' ? 'बधाई हो! आपकी दीपावली भेंट तैयार है' : 'Congratulations! Your Royal Greeting is Ready'}
+          {lang === 'hi' ? 'बधाई हो! आपकी राजसी दीपावली भेंट तैयार है' : 'Congratulations! Your Royal Greeting is Ready'}
         </h1>
 
         <p className="text-xs sm:text-sm text-gold-200/90 max-w-xl mx-auto font-devanagari mb-6">
@@ -219,7 +232,7 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
         </p>
 
         {/* Order Summary Pill Box */}
-        <div className="max-w-md mx-auto p-4 rounded-2xl bg-maroon-950/80 border border-gold-500/30 text-left mb-8 space-y-2 text-xs">
+        <div className="max-w-md mx-auto p-4 rounded-2xl bg-maroon-950/80 border border-gold-500/30 text-left mb-6 space-y-2 text-xs">
           <div className="flex justify-between items-center text-gold-300/80">
             <span>Order Reference:</span>
             <span className="font-mono text-gold-200 font-semibold">{order.id}</span>
@@ -236,6 +249,24 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
             <span>Recipient:</span>
             <span className="font-semibold text-amber-300">{order.recipientName}</span>
           </div>
+        </div>
+
+        {/* LIVE INLINE CARD PREVIEW (Clean Paid Card, Zero Free-Watermark) */}
+        <div className="my-8 max-w-2xl mx-auto text-left">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-gold-300 uppercase tracking-wider flex items-center space-x-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-gold-400" />
+              <span>Your Clean High-Resolution Greeting Card</span>
+            </span>
+            <span className="text-[11px] text-emerald-400 font-semibold">
+              ✓ Watermark-Free
+            </span>
+          </div>
+
+          <div
+            className="rounded-2xl overflow-hidden border-2 border-gold-400/50 shadow-2xl bg-black"
+            dangerouslySetInnerHTML={{ __html: cardSvg }}
+          />
         </div>
 
         <OrnateDivider className="max-w-xs mx-auto mb-8" />
@@ -264,7 +295,7 @@ export const OrderSuccessPage: React.FC<OrderSuccessPageProps> = ({
             <Download className="w-4 h-4 text-gold-400" />
             <span>
               {isDownloading
-                ? (lang === 'hi' ? 'कार्ड डाउनलोड हो रहा है...' : 'Generating PNG Card...')
+                ? (lang === 'hi' ? 'कार्ड तैयार हो रहा है...' : 'Generating PNG Card...')
                 : (lang === 'hi' ? 'डाउनलोड शुभकामना कार्ड (PNG)' : 'Download Greeting Card (PNG)')}
             </span>
           </button>

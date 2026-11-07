@@ -100,6 +100,9 @@ export async function saveOrder(order: OrderRecord): Promise<OrderRecord> {
         website_slug: order.website_slug || null,
         website_url: order.website_url || null,
         card_storage_path: order.card_storage_path || null,
+        whatsapp_delivery_status: order.whatsapp_delivery_status || 'not_requested',
+        whatsapp_message_id: order.whatsapp_message_id || null,
+        whatsapp_error: order.whatsapp_error || null,
         updated_at: new Date().toISOString()
       }).select().single();
 

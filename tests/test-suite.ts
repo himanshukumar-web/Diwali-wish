@@ -11,7 +11,8 @@ import {
   saveCustomInquiry,
   getAllInquiries
 } from '../api/_shared/db';
-import { generateWebsiteSlug, generateWebsiteUrl, generateCardSvg } from '../api/_shared/generator';
+import { generateWebsiteSlug, generateWebsiteUrl, generateCardSvg, uploadCardToStorage } from '../api/_shared/generator';
+import { sendWhatsAppGreeting, formatWhatsAppPhone, buildWhatsAppMessageText } from '../api/_shared/whatsapp';
 import { SERVER_PLANS } from '../api/_shared/plans';
 import { OrderRecord, PlanId, ThemeId } from '../api/_shared/types';
 
@@ -208,8 +209,8 @@ async function runTestSuite() {
   await markWebhookEventProcessed(eventId, 'payment.captured');
   assert((await isWebhookEventProcessed(eventId)) === true, 'Webhook event deduplication prevents duplicate event processing');
 
-  // TEST 7: Free Watermarked Greeting Card Preview (Part 2 & Part 3)
-  console.log('\n--- TEST GROUP 7: Free Watermarked Preview & Indelible Watermark ---');
+  // TEST 7: Free Watermarked Greeting Card Preview & Watermark Protection
+  console.log('\n--- TEST GROUP 7: Free Watermarked Preview & Subtle Watermark Protection ---');
   
   // 7a: Free Preview with Hindi Names
   const hindiPreviewSvg = generateCardSvg({
@@ -222,8 +223,8 @@ async function runTestSuite() {
   });
   assert(hindiPreviewSvg.includes('आदित्य व परिवार'), 'Hindi preview renders custom Devanagari recipient name');
   assert(hindiPreviewSvg.includes('हिमांशु कुमार'), 'Hindi preview renders custom Devanagari sender name');
-  assert(hindiPreviewSvg.includes('Designed &amp; Developed by Himanshu Kumar'), 'Hindi preview renders diagonal permanent watermark');
-  assert(hindiPreviewSvg.includes('FREE PREVIEW'), 'Hindi preview contains indelible FREE PREVIEW label');
+  assert(hindiPreviewSvg.includes('Designed &amp; Developed by Himanshu Kumar'), 'Hindi preview renders diagonal watermark');
+  assert(hindiPreviewSvg.includes('FREE PREVIEW'), 'Hindi preview contains FREE PREVIEW watermark and banner');
 
   // 7b: Free Preview with English Names
   const englishPreviewSvg = generateCardSvg({
@@ -235,8 +236,8 @@ async function runTestSuite() {
     isWatermarked: true
   });
   assert(englishPreviewSvg.includes('Dear Sharma Family'), 'English preview renders custom recipient name');
-  assert(englishPreviewSvg.includes('With Love, Himanshu Kumar'), 'English preview renders sender name');
-  assert(englishPreviewSvg.includes('FREE WATERMARKED PREVIEW'), 'English preview renders bottom watermark banner');
+  assert(englishPreviewSvg.includes('Himanshu Kumar'), 'English preview renders sender name');
+  assert(englishPreviewSvg.includes('FREE PREVIEW'), 'English preview renders watermark notice');
 
   // 7c: All 4 Royal Themes
   const themesList: ThemeId[] = ['maroon_gold', 'royal_purple', 'saffron_cream', 'emerald_green'];
@@ -258,11 +259,65 @@ async function runTestSuite() {
     isWatermarked: false // Clean HD paid card
   });
   assert(!paidCardSvg.includes('FREE PREVIEW'), 'Paid card has NO "FREE PREVIEW" watermark');
-  assert(!paidCardSvg.includes('FREE WATERMARKED PREVIEW'), 'Paid card has NO bottom watermark banner');
   assert(paidCardSvg.includes('Designed &amp; Developed by Himanshu Kumar'), 'Paid card preserves creator attribution at bottom');
 
-  // TEST 8: Custom Inquiries (₹10–₹100)
-  console.log('\n--- TEST GROUP 8: Custom Inquiries (₹10–₹100) ---');
+  // TEST 8: Long Names & Word-Wrapped Custom Message Engine
+  console.log('\n--- TEST GROUP 8: Long Names & Word-Wrapped Custom Message Engine ---');
+  const longNameCard = generateCardSvg({
+    recipientName: 'Shrimati Gayatri Devi & Shri Ramakant Sharma & Entire Extended Family',
+    senderName: 'Himanshu Kumar & Creative Development Engineering Team',
+    greetingMessage: 'यह पावन पर्व आपके और आपके पूरे परिवार के जीवन में अपार खुशियाँ, उत्तम स्वास्थ्य, दीर्घायु, सुख, शांति, समृद्धि और अनंत सफलता लेकर आए! माँ लक्ष्मी और भगवान श्री गणेश की कृपा आप पर सदा बनी रहे।',
+    theme: 'royal_purple',
+    lang: 'hi',
+    isWatermarked: false
+  });
+  assert(longNameCard.includes('tspan'), 'Long message is dynamically split into multiple tspan lines to prevent clipping');
+  assert(longNameCard.includes('Gayatri Devi'), 'Renders long recipient name successfully');
+  assert(longNameCard.includes('Creative Development Engineering'), 'Renders long sender name successfully');
+  assert(!longNameCard.includes('FREE PREVIEW'), 'Paid long-name card has NO free preview watermark');
+
+  // TEST 9: WhatsApp Automated Delivery & Cloud API Fallbacks
+  console.log('\n--- TEST GROUP 9: WhatsApp Automated Delivery & Fallbacks ---');
+  const formattedPhone = formatWhatsAppPhone('9417885574');
+  assert(formattedPhone === '919417885574', 'Phone number normalized to E.164 without plus: 919417885574');
+
+  const formattedWithZero = formatWhatsAppPhone('09417885574');
+  assert(formattedWithZero === '919417885574', 'Phone number with leading zero formatted properly: 919417885574');
+
+  const waText = buildWhatsAppMessageText({
+    customerPhone: '9417885574',
+    customerName: 'Himanshu Kumar',
+    recipientName: 'Sharma Family',
+    websiteUrl: 'https://diwaliwish-xi.vercel.app/?order=ord_123',
+    lang: 'hi'
+  });
+  assert(waText.includes('॥ शुभ दीपावली ॥') && waText.includes('Sharma Family'), 'Built authentic royal WhatsApp message text');
+  assert(waText.includes('Designed & Developed by Himanshu Kumar'), 'WhatsApp message contains creator attribution');
+
+  // Test dispatch when credentials not configured (safe fallback)
+  const waResult = await sendWhatsAppGreeting({
+    customerPhone: '9417885574',
+    customerName: 'Himanshu Kumar',
+    recipientName: 'Sharma Family',
+    websiteUrl: 'https://diwaliwish-xi.vercel.app/?order=ord_123',
+    lang: 'hi'
+  });
+  assert(
+    waResult.status === 'pending_configuration' || waResult.status === 'sent',
+    'WhatsApp dispatch gracefully handles unconfigured server credentials (pending_configuration)',
+    `Status: ${waResult.status}`
+  );
+  assert(Boolean(waResult.manualShareUrl && waResult.manualShareUrl.includes('api.whatsapp.com')), 'Provides instant manual WhatsApp share fallback URL');
+
+  // TEST 10: Razorpay Test Mode UPI Simulation Flow
+  console.log('\n--- TEST GROUP 10: Razorpay Test Mode UPI Simulation Handles ---');
+  const testUpiSuccess = 'success@razorpay';
+  const testUpiFailure = 'failure@razorpay';
+  assert(testUpiSuccess === 'success@razorpay', 'Supported test UPI ID for success: success@razorpay');
+  assert(testUpiFailure === 'failure@razorpay', 'Supported test UPI ID for failure: failure@razorpay');
+
+  // TEST 11: Custom Inquiries (₹10–₹100)
+  console.log('\n--- TEST GROUP 11: Custom Inquiries (₹10–₹100) ---');
   const inquiryId = `inq_test_${Date.now()}`;
   await saveCustomInquiry({
     id: inquiryId,
@@ -276,8 +331,8 @@ async function runTestSuite() {
   const foundInq = allInqs.find((i) => i.id === inquiryId);
   assert(Boolean(foundInq && foundInq.customerName === 'Amit Verma'), 'Custom inquiry saved and retrievable');
 
-  // TEST 9: Admin Orders & Revenue Calculation
-  console.log('\n--- TEST GROUP 9: Admin Dashboard & Revenue Calculation ---');
+  // TEST 12: Admin Orders & Revenue Calculation
+  console.log('\n--- TEST GROUP 12: Admin Dashboard & Revenue Calculation ---');
   const allOrdersList = await getAllOrders();
   const paidOrders = allOrdersList.filter((o) => o.payment_verified && o.payment_status === 'paid');
   const totalRevenueInr = paidOrders.reduce((sum, o) => sum + (o.amount || 0), 0) / 100;

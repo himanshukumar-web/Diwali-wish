@@ -44,6 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         websiteSlug: order.website_slug,
         websiteUrl: order.website_url,
         cardDownloadUrl: order.card_storage_path,
+        whatsappDeliveryStatus: order.whatsapp_delivery_status || 'pending_configuration',
+        whatsappMessageId: order.whatsapp_message_id || null,
         createdAt: order.created_at
       }
     });

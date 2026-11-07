@@ -20,7 +20,8 @@ import {
   Eye,
   Lock,
   Globe,
-  Info
+  Info,
+  Copy
 } from 'lucide-react';
 import { Language, PlanId, ThemeId, CustomerFormData } from '../types';
 import { PLANS, THEMES, getPlanById } from '../data/plansData';
@@ -64,6 +65,16 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [copiedUpi, setCopiedUpi] = useState(false);
+
+  const handleCopyUpi = () => {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText('success@razorpay').then(() => {
+        setCopiedUpi(true);
+        setTimeout(() => setCopiedUpi(false), 2500);
+      });
+    }
+  };
 
   // Sync selected plan with form
   const handleSelectPlan = (planId: PlanId) => {
@@ -213,6 +224,11 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
         },
         theme: {
           color: '#3B0D16' // Royal Maroon
+        },
+        notes: {
+          test_mode: 'true',
+          upi_simulation_vpa: 'success@razorpay',
+          instruction: 'In Test Mode, use success@razorpay instead of scanning QR'
         },
         modal: {
           ondismiss: () => {
@@ -678,6 +694,58 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
             />
           </div>
 
+          {/* Razorpay Test Mode UPI Guidance Banner */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-400/40 shadow-inner text-left">
+            <div className="flex items-start space-x-3">
+              <div className="p-2 rounded-xl bg-amber-400/20 text-amber-300 mt-0.5 shrink-0">
+                <ShieldCheck className="w-5 h-5 text-amber-300" />
+              </div>
+              <div className="flex-1 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <h5 className="font-heading font-bold text-sm text-gold-200">
+                    {lang === 'hi' ? '⚡ रेज़रपे टेस्ट मोड यूपीआई (UPI) भुगतान निर्देश' : '⚡ Razorpay Test Mode UPI Payment Guide'}
+                  </h5>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-[11px] font-semibold text-amber-300">
+                    SANDBOX TEST MODE
+                  </span>
+                </div>
+                <p className="text-gold-200/90 leading-relaxed mb-2.5">
+                  {lang === 'hi'
+                    ? 'रेज़रपे टेस्ट मोड में स्क्रीन पर प्रदर्शित QR कोड को असली Google Pay, PhonePe या Paytm से स्कैन करने पर बैंक "Technical Error" दर्शाता है क्योंकि यह सैंडबॉक्स परीक्षण है।'
+                    : 'In Razorpay Test Mode, scanning the test QR with a real UPI app (GPay/PhonePe/Paytm) produces a technical bank error because sandbox accounts are not live on NPCI.'}
+                </p>
+                <div className="p-3 rounded-xl bg-black/40 border border-gold-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                  <div className="text-gold-300">
+                    <span className="font-bold text-amber-300 block mb-0.5">
+                      {lang === 'hi' ? '✅ सफल भुगतान अनुकरण करने के लिए:' : '✅ To Simulate Successful Payment:'}
+                    </span>
+                    <span className="text-[11px] text-ivory-100/90">
+                      {lang === 'hi'
+                        ? 'पॉपअप में UPI → "UPI ID" चुनें और दर्ज करें:'
+                        : 'In Razorpay popup, select UPI → Choose "UPI ID" and enter:'}
+                    </span>
+                    <code className="ml-1.5 px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-xs select-all">
+                      success@razorpay
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyUpi}
+                    className="px-3 py-1.5 rounded-lg bg-gold-500/20 hover:bg-gold-500/30 border border-gold-400/40 text-gold-200 text-xs font-semibold flex items-center space-x-1 transition shrink-0"
+                  >
+                    {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedUpi ? (lang === 'hi' ? 'कॉपी हो गया' : 'Copied!') : (lang === 'hi' ? 'आईडी कॉपी करें' : 'Copy Test VPA')}</span>
+                  </button>
+                </div>
+                <p className="text-[11px] text-gold-300/70 mt-2">
+                  {lang === 'hi'
+                    ? '❌ विफलता (Payment Failure) का परीक्षण करने के लिए "failure@razorpay" दर्ज करें।'
+                    : '❌ To test payment rejection/failure handling, enter "failure@razorpay".'}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* TWO CLEAR ACTIONS: 1. Preview Free Greeting | 2. Pay & Get Full Personalized Greeting */}
           <div className="pt-6 border-t border-gold-500/30">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4">
@@ -771,6 +839,62 @@ export const CustomizationSection: React.FC<CustomizationSectionProps> = ({
                 <span className="block text-amber-400 text-[10px]">
                   {lang === 'hi' ? 'क्लीन एचडी कार्ड व बिना वाटरमार्क डाउनलोड किसी भी प्लान के साथ अनलॉक होता है।' : 'Clean HD download without watermark is unlocked upon purchasing any plan.'}
                 </span>
+              </div>
+            </div>
+
+            {/* Interactive Preview Studio Controls (Instant Theme & Language Switching) */}
+            <div className="mb-4 p-3 rounded-2xl bg-maroon-950/80 border border-gold-500/30 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-gold-300 font-semibold mr-1 flex items-center space-x-1">
+                  <Palette className="w-3.5 h-3.5 text-gold-400" />
+                  <span>{lang === 'hi' ? 'थीम बदलें:' : 'Preview Theme:'}</span>
+                </span>
+                {(Object.keys(THEMES) as ThemeId[]).map((tId) => {
+                  const t = THEMES[tId];
+                  const isActive = formData.preferredTheme === tId;
+                  return (
+                    <button
+                      key={tId}
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, preferredTheme: tId }))}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition flex items-center space-x-1.5 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-gold-400 to-amber-400 text-maroon-950 shadow-md font-bold'
+                          : 'bg-black/40 text-gold-200/80 hover:bg-gold-500/20 border border-gold-500/20'
+                      }`}
+                    >
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: t.accentColor }}></span>
+                      <span>{t.nameEn.split(' ')[0]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Language Switcher */}
+              <div className="flex items-center space-x-1.5 bg-black/40 p-1 rounded-xl border border-gold-500/30">
+                <Globe className="w-3.5 h-3.5 text-gold-400 ml-1.5" />
+                <button
+                  type="button"
+                  onClick={() => setPreviewLang('hi')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                    previewLang === 'hi'
+                      ? 'bg-gold-500/30 text-gold-200 border border-gold-400/50 font-bold'
+                      : 'text-gold-400/70 hover:text-gold-200'
+                  }`}
+                >
+                  हिन्दी
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewLang('en')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                    previewLang === 'en'
+                      ? 'bg-gold-500/30 text-gold-200 border border-gold-400/50 font-bold'
+                      : 'text-gold-400/70 hover:text-gold-200'
+                  }`}
+                >
+                  English
+                </button>
               </div>
             </div>
 
